@@ -1,3 +1,47 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+#keys {
+    margin-bottom: 1em;
+    margin-top: 1em;
+}
+
+#selected {
+    margin-bottom: 1em;
+    margin-top: 1em;
+}
+
+#play {
+    margin-bottom: 1em;
+    margin-top: 1em;
+}
+
+#chord-display {
+	height: auto;
+	min-width: 100px;
+	width: auto;
+	border: 1px solid;
+	border-radius: 12px;
+	text-align: center;
+	font-size: 2.15em;
+	padding: 20px 20px;
+	border-color: #3e49e6;
+	background-color: rgba(0, 255, 98, 0.35);
+}
+
+.bg-black {
+	background-color: rgb(0, 0, 0);
+}
+
+.bg-blue-400 {
+	background-color: rgba(65, 205, 236, 0.852);
+}
+
+.bg-blue-800 {
+	background-color: rgb(1, 95, 116);
+}
+
+.bg-red-600 {
+	background-color: rgb(99, 5, 5);
+}

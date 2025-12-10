@@ -1,6 +1,5 @@
 import KordApp from "./components/KordApp";
 import './index.css';
-import "./App.css";
 
 function App() {
   return (

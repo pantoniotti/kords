@@ -4,11 +4,14 @@ import { detect as detectChord } from "@tonaljs/chord-detect";
 //////// CONSTANTS & HELPERS ///////
 
 const KEYS = [
+	"C1","C#1","D1","D#1","E1","F1","F#1","G1","G#1","A1","A#1","B1",
+	"C2","C#2","D2","D#2","E2","F2","F#2","G2","G#2","A2","A#2","B2",
 	"C3", "C#3", "D3", "D#3", "E3", "F3", "F#3", "G3", "G#3", "A3", "A#3", "B3",
 	"C4", "C#4", "D4", "D#4", "E4", "F4", "F#4", "G4", "G#4", "A4", "A#4", "B4",
 	"C5", "C#5", "D5", "D#5", "E5", "F5", "F#5", "G5", "G#5", "A5", "A#5", "B5",
 	"C6"
 ];
+
 const whiteKeys = KEYS.filter(k => !k.includes("#"));
 const whiteKeyWidth = 48;
 const blackKeyOffsetMap: Record<string, number> = { C: 32, D: 30, F: 30, G: 30, A: 30 };
@@ -24,6 +27,7 @@ const EXTRA_KEYBOARD: Record<string, string> = {
 
 const audioCtx = new (window.AudioContext)();
 const CHORD_THRESHOLD = 50;
+const VISIBLE_KEYS_COUNT = 37;
 
 /////// MUSIC FUNCTIONS ///////
 
@@ -75,7 +79,7 @@ function midiNoteToName(midi: number): string | null {
 export default function KordApp() {
 	const [activeNotes, setActiveNotes] = useState<string[]>([]);
 	const [chordName, setChordName] = useState<string>("—");
-	const [baseOctave, setBaseOctave] = useState(4);
+	const [baseOctave, setBaseOctave] = useState(3);
 	const chordTimer = useRef<NodeJS.Timeout | null>(null);
 	const pressedNotes = useRef<Set<string>>(new Set());
 
@@ -101,10 +105,8 @@ export default function KordApp() {
 			pressedNotes.current.clear();
 
 			if (notes.length > 1) {
-				// Multi-note chord: replace selection
 				setActiveNotes(notes);
 			} else if (notes.length === 1) {
-				// Single key: toggle
 				setActiveNotes(prev => {
 					const newNotes = prev.includes(notes[0]) ? prev.filter(n => n !== notes[0]) : [...prev, notes[0]];
 					return newNotes;
@@ -136,6 +138,15 @@ export default function KordApp() {
 
 	//// QWERTY HANDLERS
 	const handleKeyDown = (e: KeyboardEvent) => {
+		if (e.key === "z") {
+			setBaseOctave(prev => Math.max(1, prev - 1));
+			return;
+		}
+		if (e.key === "x") {
+			setBaseOctave(prev => Math.min(4, prev + 1)); // max start octave = 4 for 37 keys
+			return;
+		}
+
 		const note = getNoteFromKey(e.key.toLowerCase());
 		if (!note) return;
 		if (!pressedNotes.current.has(note)) handleIncomingNote(note);
@@ -176,19 +187,23 @@ export default function KordApp() {
 		});
 	}, []);
 
+	//// SLIDING WINDOW
+	const startIndex = Math.min(Math.max(0, KEYS.findIndex(k => parseInt(k.slice(-1)) === baseOctave)), KEYS.length - VISIBLE_KEYS_COUNT);
+	const visibleKeys = KEYS.slice(startIndex, startIndex + VISIBLE_KEYS_COUNT);
+	const visibleWhiteKeys = visibleKeys.filter(k => !k.includes("#"));
+
 	//// BLACK KEY POSITIONS
 	const blackKeyPositions: { note: string; leftPosition: number }[] = [];
-	KEYS.forEach(key => {
-		if (key.includes("#")) {
-			const pred = KEYS[KEYS.indexOf(key) - 1];
-			if (!pred) return;
-			const predLetter = pred.match(/[A-G]/)?.[0];
-			if (!predLetter) return;
-			const idx = whiteKeys.indexOf(pred);
-			const offset = blackKeyOffsetMap[predLetter];
-			if (offset === undefined) return;
-			blackKeyPositions.push({ note: key, leftPosition: whiteKeys.indexOf(pred) * whiteKeyWidth + offset });
-		}
+	visibleKeys.forEach(key => {
+		if (!key.includes("#")) return;
+		const pred = KEYS[KEYS.indexOf(key) - 1];
+		if (!pred) return;
+		const predLetter = pred.match(/[A-G]/)?.[0];
+		if (!predLetter) return;
+		const idx = visibleWhiteKeys.indexOf(pred);
+		const offset = blackKeyOffsetMap[predLetter];
+		if (offset === undefined || idx === -1) return;
+		blackKeyPositions.push({ note: key, leftPosition: idx * whiteKeyWidth + offset });
 	});
 
 	//// RENDER
@@ -199,15 +214,14 @@ export default function KordApp() {
 			<div id="keyboard-wrapper" className="p-4 bg-gray-800 rounded-xl shadow-lg">
 				<div
 					className="relative mx-auto"
-					style={{ width: `${whiteKeys.length * whiteKeyWidth}px`, height: "200px" }}
+					style={{ width: `${visibleWhiteKeys.length * whiteKeyWidth}px`, height: "200px" }}
 				>
 					<div className="flex">
-						{whiteKeys.map(note => (
+						{visibleWhiteKeys.map(note => (
 							<div
 								key={note}
 								onClick={() => toggleNote(note)}
-								className={`w-[48px] h-[192px] border border-gray-300 rounded-b-lg relative z-0 cursor-pointer transition shadow-md ${activeNotes.includes(note) ? "bg-blue-400" : "bg-white"
-									}`}
+								className={`w-[48px] h-[192px] border border-gray-300 rounded-b-lg relative z-0 cursor-pointer transition shadow-md ${activeNotes.includes(note) ? "bg-blue-400" : "bg-white"}`}
 							/>
 						))}
 					</div>
@@ -216,12 +230,16 @@ export default function KordApp() {
 						<div
 							key={note}
 							onClick={() => toggleNote(note)}
-							className={`w-[32px] h-[128px] absolute top-0 z-10 rounded-b-md cursor-pointer transition shadow-2xl ${activeNotes.includes(note) ? "bg-blue-800" : "bg-black"
-								}`}
+							className={`w-[32px] h-[128px] absolute top-0 z-10 rounded-b-md cursor-pointer transition shadow-2xl ${activeNotes.includes(note) ? "bg-blue-800" : "bg-black"}`}
 							style={{ left: `${leftPosition}px`, top: 0 }}
 						/>
 					))}
 				</div>
+			</div>
+
+			{/* OCTAVE DISPLAY */}
+			<div className="mt-2 p-2 bg-gray-700 text-white rounded text-center w-full max-w-[300px]">
+				Octave: {visibleKeys[0]?.slice(-1)} – {visibleKeys[visibleKeys.length - 1]?.slice(-1)}
 			</div>
 
 			---

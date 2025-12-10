@@ -4,8 +4,8 @@ import { detect as detectChord } from "@tonaljs/chord-detect";
 //////// CONSTANTS & HELPERS ///////
 
 const KEYS = [
-	"C1","C#1","D1","D#1","E1","F1","F#1","G1","G#1","A1","A#1","B1",
-	"C2","C#2","D2","D#2","E2","F2","F#2","G2","G#2","A2","A#2","B2",
+	"C1", "C#1", "D1", "D#1", "E1", "F1", "F#1", "G1", "G#1", "A1", "A#1", "B1",
+	"C2", "C#2", "D2", "D#2", "E2", "F2", "F#2", "G2", "G#2", "A2", "A#2", "B2",
 	"C3", "C#3", "D3", "D#3", "E3", "F3", "F#3", "G3", "G#3", "A3", "A#3", "B3",
 	"C4", "C#4", "D4", "D#4", "E4", "F4", "F#4", "G4", "G#4", "A4", "A#4", "B4",
 	"C5", "C#5", "D5", "D#5", "E5", "F5", "F#5", "G5", "G#5", "A5", "A#5", "B5",
@@ -178,14 +178,21 @@ export default function KordApp() {
 					const note = midiNoteToName(key);
 					if (!note) return;
 
-					if (status === 144 && velocity > 0) handleIncomingNote(note);
+					if (status === 144 && velocity > 0) {
+						// Note ON → handle like keyboard
+						if (!pressedNotes.current.has(note)) handleIncomingNote(note);
+					}
+
 					if (status === 128 || (status === 144 && velocity === 0)) {
-						setActiveNotes(prev => prev.filter(n => n !== note));
+						// Note OFF → remove from pressedNotes only
+						pressedNotes.current.delete(note);
+						// do NOT remove from activeNotes immediately
 					}
 				};
 			}
 		});
 	}, []);
+
 
 	//// SLIDING WINDOW
 	const startIndex = Math.min(Math.max(0, KEYS.findIndex(k => parseInt(k.slice(-1)) === baseOctave)), KEYS.length - VISIBLE_KEYS_COUNT);
@@ -237,12 +244,12 @@ export default function KordApp() {
 				</div>
 			</div>
 
-			{/* OCTAVE DISPLAY */}
-			<div className="mt-2 p-2 bg-gray-700 text-white rounded text-center w-full max-w-[300px]">
-				Octave: {visibleKeys[0]?.slice(-1)} – {visibleKeys[visibleKeys.length - 1]?.slice(-1)}
+			<div
+				id="octave-display"
+				className="mt-2 p-2 bg-gray-700 text-white rounded text-center w-full max-w-[300px]">
+				Octaves: {visibleKeys[0]?.slice(-1)} – {visibleKeys[visibleKeys.length - 1]?.slice(-1)}
 			</div>
 
-			---
 
 			<div
 				id="chord-display"

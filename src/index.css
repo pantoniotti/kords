@@ -17,6 +17,11 @@
     margin-top: 1em;
 }
 
+#octave-display {
+    margin-bottom: 1em;
+    margin-top: 1em;
+}
+
 #chord-display {
 	height: auto;
 	min-width: 100px;

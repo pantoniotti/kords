@@ -12,6 +12,7 @@
   "dependencies": {
     "@tailwindcss/vite": "^4.1.17",
     "@tonaljs/chord": "^6.1.1",
+    "@tonaljs/tonal": "^4.10.0",
     "framer-motion": "^12.23.25",
     "howler": "^2.2.4",
     "react": "^19.2.0",

@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from "react";
 import { detect as detectChord } from "@tonaljs/chord-detect";
+import { Note } from "@tonaljs/tonal";
+import SavedChordsPanel from "./SavedChordsPanel";
 import ChordImportExport from "./ChordImportExport";
+import Keyboard from "./Keyboard";
 
 //////// CONSTANTS & HELPERS ///////
 
@@ -74,17 +77,31 @@ function midiNoteToName(midi: number): string | null {
 	return `${note}${octave}`;
 }
 
+function sortNotesByPitch(notes: string[]) {
+	return [...notes].sort((a, b) => {
+		const ma = Note.midi(a);
+		const mb = Note.midi(b);
+		if (ma == null || mb == null) return 0;
+		return ma - mb;
+	});
+}
+
 ///////// COMPONENT /////////
 
 export default function KordApp() {
 	const [activeNotes, setActiveNotes] = useState<string[]>([]);
 	const [chordName, setChordName] = useState<string>("—");
 	const [baseOctave, setBaseOctave] = useState(3);
-	const chordTimer = useRef<NodeJS.Timeout | null>(null);
+	const chordTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const pressedNotes = useRef<Set<string>>(new Set());
 
 	// saved chords state
-	const [savedChords, setSavedChords] = useState<string[][]>([]);
+	type SavedChord = { label: string; notes: string[] };
+	const [savedChords, setSavedChords] = useState<SavedChord[]>([]);
+
+	const currentChord = activeNotes.length > 0 && chordName && chordName !== "—"
+		? { label: chordName, notes: activeNotes }
+		: null;
 
 	//// CHORD DETECTION
 	useEffect(() => {
@@ -107,12 +124,15 @@ export default function KordApp() {
 			const notes = Array.from(pressedNotes.current);
 			pressedNotes.current.clear();
 
-			if (notes.length > 1) {
-				setActiveNotes(notes);
-			} else if (notes.length === 1) {
+			if (notes.length > 0) {
 				setActiveNotes(prev => {
-					const newNotes = prev.includes(notes[0]) ? prev.filter(n => n !== notes[0]) : [...prev, notes[0]];
-					return newNotes;
+					// merge the new notes with existing ones if length === 1
+					const mergedNotes = notes.length === 1 ?
+						(prev.includes(notes[0]) ? prev.filter(n => n !== notes[0]) : [...prev, notes[0]])
+						: notes;
+
+					// always sort before returning
+					return sortNotesByPitch(mergedNotes);
 				});
 			}
 
@@ -177,6 +197,7 @@ export default function KordApp() {
 		navigator.requestMIDIAccess().then(midi => {
 			for (let input of midi.inputs.values()) {
 				input.onmidimessage = (msg) => {
+					if (!msg.data) return;
 					const [status, key, velocity] = msg.data;
 					const note = midiNoteToName(key);
 					if (!note) return;
@@ -217,55 +238,25 @@ export default function KordApp() {
 
 	//// RENDER
 	return (
-		<div className="bg-gray-900 min-h-screen p-6 text-white flex flex-col items-center">
+		<div className="bg-gray-900 min-h-screen p-8 text-white flex flex-col items-center">
 			<h1 className="text-3xl font-bold mb-6 text-center">🎹 Chord Tool</h1>
 
-			<div id="keyboard-wrapper" className="p-4 bg-gray-800 rounded-xl shadow-lg">
-				<div
-					className="relative mx-auto"
-					style={{ width: `${visibleWhiteKeys.length * whiteKeyWidth}px`, height: "200px" }}
-				>
-					<div className="flex">
-						{visibleWhiteKeys.map(note => (
-							<div
-								key={note}
-								onClick={() => toggleNote(note)}
-								className={`w-[48px] h-[192px] border border-gray-300 rounded-b-lg relative z-0 cursor-pointer transition shadow-md ${activeNotes.includes(note) ? "bg-blue-400" : "bg-white"}`}
-							/>
-						))}
-					</div>
-
-					{blackKeyPositions.map(({ note, leftPosition }) => (
-						<div
-							key={note}
-							onClick={() => toggleNote(note)}
-							className={`w-[32px] h-[128px] absolute top-0 z-10 rounded-b-md cursor-pointer transition shadow-2xl ${activeNotes.includes(note) ? "bg-blue-800" : "bg-black"}`}
-							style={{ left: `${leftPosition}px`, top: 0 }}
-						/>
-					))}
-				</div>
-			</div>
-
-			<div
-				id="octave-display"
-				className="mt-2 p-2 bg-gray-700 text-white rounded text-center w-full max-w-[300px]">
-				Octaves: {visibleKeys[0]?.slice(-1)} – {visibleKeys[visibleKeys.length - 1]?.slice(-1)}
-			</div>
-
-			<div
-				id="selected"
-				className="mt-6 p-3 bg-gray-100 text-gray-900 rounded text-xl text-center w-full max-w-[600px]"
-			>
-				Selected Notes: {activeNotes.join(" • ") || "None"}
-			</div>
+			<Keyboard
+				visibleKeys={visibleKeys}
+				visibleWhiteKeys={visibleWhiteKeys}
+				blackKeyPositions={blackKeyPositions}
+				activeNotes={activeNotes}
+				toggleNote={toggleNote}
+				whiteKeyWidth={whiteKeyWidth}
+			/>
 
 			<div
 				id="chord-display"
-				draggable={activeNotes.length > 0}
+				draggable={!!currentChord}
 				onDragStart={(e) => {
-					if (activeNotes.length > 0) {
-						e.dataTransfer.setData("text/plain", JSON.stringify(activeNotes));
-					}
+					if (!currentChord) return;
+					// Use the explicit application/chord MIME so the saved panel knows how to parse it
+					e.dataTransfer.setData("application/chord", JSON.stringify(currentChord));
 				}}
 				onClick={() => activeNotes.forEach(n => playTone(noteToFreq(n), 1))}
 				className="mt-4 p-4 bg-green-500 text-white rounded-lg text-2xl font-bold text-center w-full max-w-[300px] shadow-lg cursor-move"
@@ -273,75 +264,13 @@ export default function KordApp() {
 				{chordName}
 			</div>
 
-			{/* SAVED CHORDS PANEL */}
-			<div
-				className="mt-6 p-4 bg-gray-900 rounded-xl shadow-lg w-full max-w-[700px]"
-			>
-				<h2 className="text-white text-lg font-semibold mb-3">Saved Chords</h2>
-
-				{/* DROP ZONE */}
-				<div
-					onDragOver={(e) => {
-						e.preventDefault();
-						e.currentTarget.classList.add("ring-2", "ring-blue-400");
-					}}
-					onDragLeave={(e) => {
-						e.currentTarget.classList.remove("ring-2", "ring-blue-400");
-					}}
-					onDrop={(e) => {
-						e.preventDefault();
-						e.currentTarget.classList.remove("ring-2", "ring-blue-400");
-
-						const data = e.dataTransfer.getData("application/json") ||
-							e.dataTransfer.getData("text/plain");
-
-						if (!data) return;
-
-						try {
-							const chord = JSON.parse(data);
-							if (Array.isArray(chord)) {
-								setSavedChords(prev => [...prev, chord]);
-							}
-						} catch { }
-					}}
-					className="
-						min-h-[150px]
-						border-2 border-dashed border-gray-600
-						rounded-lg
-						flex flex-wrap justify-center items-start gap-3
-						p-4
-						transition-all
-					"
-				>
-					{savedChords.map((chord, i) => (
-						<div
-							key={i}
-							className="relative px-3 py-2 bg-gray-700 text-white rounded-lg shadow cursor-pointer hover:bg-gray-600"
-						>
-							{/* DELETE BUTTON */}
-							<button
-								onClick={(e) => {
-									e.stopPropagation();
-									setSavedChords(prev => prev.filter((_, idx) => idx !== i));
-								}}
-								className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
-							>
-								✕
-							</button>
-
-							{/* Recall chord */}
-							<div
-								onClick={() => {	
-									setActiveNotes(chord);
-									chord.forEach(n => playTone(noteToFreq(n), 0.8));
-								}}
-							>
-								{chord.join(" – ")}
-							</div>
-						</div>
-					))}
-				</div>
-			</div>
+			<SavedChordsPanel
+				savedChords={savedChords}
+				setSavedChords={setSavedChords}
+				setActiveNotes={setActiveNotes}
+				playTone={playTone}
+				noteToFreq={noteToFreq}
+			/>
 
 			<div className="mt-4">
 				<ChordImportExport

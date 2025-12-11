@@ -1,6 +1,4 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
 #keys {
     margin-bottom: 1em;
@@ -20,6 +18,11 @@
 #octave-display {
     margin-bottom: 1em;
     margin-top: 1em;
+}
+
+#chord-import-export {
+	margin-bottom: 1em;
+	margin-top: 1em;
 }
 
 #chord-display {

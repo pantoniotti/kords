@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { detect as detectChord } from "@tonaljs/chord-detect";
+import ChordImportExport from "./ChordImportExport";
 
 //////// CONSTANTS & HELPERS ///////
 
@@ -12,7 +13,6 @@ const KEYS = [
 	"C6"
 ];
 
-const whiteKeys = KEYS.filter(k => !k.includes("#"));
 const whiteKeyWidth = 48;
 const blackKeyOffsetMap: Record<string, number> = { C: 32, D: 30, F: 30, G: 30, A: 30 };
 
@@ -82,6 +82,9 @@ export default function KordApp() {
 	const [baseOctave, setBaseOctave] = useState(3);
 	const chordTimer = useRef<NodeJS.Timeout | null>(null);
 	const pressedNotes = useRef<Set<string>>(new Set());
+
+	// saved chords state
+	const [savedChords, setSavedChords] = useState<string[][]>([]);
 
 	//// CHORD DETECTION
 	useEffect(() => {
@@ -167,7 +170,7 @@ export default function KordApp() {
 		};
 	}, [baseOctave]);
 
-	//// MIDI INPUT
+	//// MIDI INPUT (fixed to stick notes)
 	useEffect(() => {
 		if (!navigator.requestMIDIAccess) return;
 
@@ -192,7 +195,6 @@ export default function KordApp() {
 			}
 		});
 	}, []);
-
 
 	//// SLIDING WINDOW
 	const startIndex = Math.min(Math.max(0, KEYS.findIndex(k => parseInt(k.slice(-1)) === baseOctave)), KEYS.length - VISIBLE_KEYS_COUNT);
@@ -250,14 +252,6 @@ export default function KordApp() {
 				Octaves: {visibleKeys[0]?.slice(-1)} – {visibleKeys[visibleKeys.length - 1]?.slice(-1)}
 			</div>
 
-
-			<div
-				id="chord-display"
-				className="mt-4 p-4 bg-green-500 text-white rounded-lg text-2xl font-bold text-center w-full max-w-[300px] shadow-lg"
-			>
-				{chordName}
-			</div>
-
 			<div
 				id="selected"
 				className="mt-6 p-3 bg-gray-100 text-gray-900 rounded text-xl text-center w-full max-w-[600px]"
@@ -265,14 +259,97 @@ export default function KordApp() {
 				Selected Notes: {activeNotes.join(" • ") || "None"}
 			</div>
 
-			<div id="play" className="flex justify-center mt-4">
-				<button
-					onClick={() => activeNotes.forEach(n => playTone(noteToFreq(n), 1))}
-					className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition"
-				>
-					▶ Play Chord
-				</button>
+			<div
+				id="chord-display"
+				draggable={activeNotes.length > 0}
+				onDragStart={(e) => {
+					if (activeNotes.length > 0) {
+						e.dataTransfer.setData("text/plain", JSON.stringify(activeNotes));
+					}
+				}}
+				onClick={() => activeNotes.forEach(n => playTone(noteToFreq(n), 1))}
+				className="mt-4 p-4 bg-green-500 text-white rounded-lg text-2xl font-bold text-center w-full max-w-[300px] shadow-lg cursor-move"
+			>
+				{chordName}
 			</div>
+
+			{/* SAVED CHORDS PANEL */}
+			<div
+				className="mt-6 p-4 bg-gray-900 rounded-xl shadow-lg w-full max-w-[700px]"
+			>
+				<h2 className="text-white text-lg font-semibold mb-3">Saved Chords</h2>
+
+				{/* DROP ZONE */}
+				<div
+					onDragOver={(e) => {
+						e.preventDefault();
+						e.currentTarget.classList.add("ring-2", "ring-blue-400");
+					}}
+					onDragLeave={(e) => {
+						e.currentTarget.classList.remove("ring-2", "ring-blue-400");
+					}}
+					onDrop={(e) => {
+						e.preventDefault();
+						e.currentTarget.classList.remove("ring-2", "ring-blue-400");
+
+						const data = e.dataTransfer.getData("application/json") ||
+							e.dataTransfer.getData("text/plain");
+
+						if (!data) return;
+
+						try {
+							const chord = JSON.parse(data);
+							if (Array.isArray(chord)) {
+								setSavedChords(prev => [...prev, chord]);
+							}
+						} catch { }
+					}}
+					className="
+						min-h-[150px]
+						border-2 border-dashed border-gray-600
+						rounded-lg
+						flex flex-wrap justify-center items-start gap-3
+						p-4
+						transition-all
+					"
+				>
+					{savedChords.map((chord, i) => (
+						<div
+							key={i}
+							className="relative px-3 py-2 bg-gray-700 text-white rounded-lg shadow cursor-pointer hover:bg-gray-600"
+						>
+							{/* DELETE BUTTON */}
+							<button
+								onClick={(e) => {
+									e.stopPropagation();
+									setSavedChords(prev => prev.filter((_, idx) => idx !== i));
+								}}
+								className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
+							>
+								✕
+							</button>
+
+							{/* Recall chord */}
+							<div
+								onClick={() => {	
+									setActiveNotes(chord);
+									chord.forEach(n => playTone(noteToFreq(n), 0.8));
+								}}
+							>
+								{chord.join(" – ")}
+							</div>
+						</div>
+					))}
+				</div>
+			</div>
+
+			<div className="mt-4">
+				<ChordImportExport
+					savedChords={savedChords}
+					setSavedChords={setSavedChords}
+				/>
+			</div>
+
 		</div>
 	);
 }

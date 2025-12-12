@@ -17,12 +17,29 @@ export default function ChordImportExport({ savedChords, setSavedChords }: Chord
     const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
+
         file.text().then((content) => {
             try {
                 const parsed = JSON.parse(content);
-                if (Array.isArray(parsed)) setSavedChords(parsed);
+
+                // Must be an array
+                if (!Array.isArray(parsed)) return;
+
+                // Validate each entry
+                const validChords = parsed.filter(ch =>
+                    ch &&
+                    typeof ch === "object" &&
+                    typeof ch.label === "string" &&
+                    Array.isArray(ch.notes)
+                );
+
+                // Only update if we have valid chords
+                if (validChords.length > 0) {
+                    setSavedChords(validChords);
+                }
+
             } catch {
-                // ignore invalid files
+                // invalid JSON ignored
             }
         });
     };

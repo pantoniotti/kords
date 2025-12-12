@@ -1,6 +1,15 @@
+import { useEffect } from "react";
+import {
+	DragDropContext,
+	Droppable,
+	Draggable,
+	type DropResult,
+} from "@hello-pangea/dnd";
+
 type SavedChord = {
-	label: string;      // visible chord name
-	notes: string[];    // hidden actual MIDI notes
+	label: string;
+	notes: string[];
+	id?: string; // stable id
 };
 
 type Props = {
@@ -16,89 +25,97 @@ export default function SavedChordsPanel({
 	setSavedChords,
 	setActiveNotes,
 	playTone,
-	noteToFreq
+	noteToFreq,
 }: Props) {
+	// Ensure stable IDs
+	useEffect(() => {
+		const missing = savedChords.some((c) => !c.id);
+		if (missing) {
+			setSavedChords((prev) =>
+				prev.map((c) => (c.id ? c : { ...c, id: crypto.randomUUID() }))
+			);
+		}
+	}, [savedChords, setSavedChords]);
+
+	const onDragEnd = (result: DropResult) => {
+		if (!result.destination) return;
+		const src = result.source.index;
+		const dst = result.destination.index;
+		const altPressed = result.combine ? true : result.reason === "DROP"; // optional: detect Alt differently if needed
+
+		setSavedChords((prev) => {
+			const copy = [...prev];
+			const chord = copy[src];
+
+			if (altPressed) {
+				// duplicate at new position
+				copy.splice(dst, 0, { ...chord, id: crypto.randomUUID() });
+			} else {
+				// move
+				copy.splice(src, 1);
+				copy.splice(dst, 0, chord);
+			}
+			return copy;
+		});
+	};
+
+	const deleteChord = (index: number) => {
+		setSavedChords((prev) => prev.filter((_, i) => i !== index));
+	};
 
 	return (
-		<div className="mt-6 p-4 bg-gray-900 rounded-xl shadow-lg w-full max-w-[700px]">
-			<h2 className="text-white text-lg font-semibold mb-3">Saved Chords</h2>
+		<div className="mt-6 p-4 bg-gray-900 rounded-xl shadow-lg w-full max-w-[1100px] hidden">
+			<h2 className="text-white font-semibold mb-2"></h2>
 
-			{/* DROP ZONE */}
-			<div
-				onDragOver={(e) => {
-					e.preventDefault();
-					e.currentTarget.classList.add("ring-2", "ring-blue-400");
-				}}
-				onDragLeave={(e) => {
-					e.currentTarget.classList.remove("ring-2", "ring-blue-400");
-				}}
-				onDrop={(e) => {
-					e.preventDefault();
-					e.currentTarget.classList.remove("ring-2", "ring-blue-400");
-
-					const json =
-						e.dataTransfer.getData("application/chord") ||
-						e.dataTransfer.getData("application/json");
-
-					if (!json) return;
-
-					try {
-						const chord = JSON.parse(json);
-
-						// chord { label: string, notes: number[] }
-						if (chord?.label && Array.isArray(chord.notes)) {
-							setSavedChords((prev) => [...prev, chord]);
-						}
-					} catch { }
-				}}
-				className="
-                    min-h-[150px]
-                    border-2 border-dashed border-gray-600
-                    rounded-lg
-                    flex flex-wrap justify-center items-start gap-3
-                    p-4
-                    transition-all
-                "
-			>
-
-				{/* SAVED CHORDS */}
-				{savedChords.map((chord, i) => (
-					<div
-						key={i}
-						className="relative px-6 py-4 bg-gray-700 text-white rounded-lg shadow cursor-pointer hover:bg-gray-600"
-					>
-						{/* DELETE BUTTON */}
-						<button
-							onClick={(e) => {
-								e.stopPropagation();
-								setSavedChords((prev) =>
-									prev.filter((_, idx) => idx !== i)
-								);
-							}}
-							className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
-						>
-							✕
-						</button>
-
-						{/* RECALL CHORD */}
+			<DragDropContext onDragEnd={onDragEnd}>
+				<Droppable droppableId="saved-chords" direction="horizontal">
+					{(provided) => (
 						<div
-							onClick={() => {
-								setActiveNotes(chord.notes);
-								chord.notes.forEach(n =>
-									playTone(noteToFreq(n), 0.8)
-								);
-							}}
+							ref={provided.innerRef}
+							{...provided.droppableProps}
+							className="flex flex-wrap gap-3 p-2 min-h-[60px] border-2 border-dashed border-gray-600 rounded-lg"
 						>
-							{chord.label}
-						</div>
+							{savedChords.map((chord, i) => (
+								<Draggable key={chord.id!} draggableId={chord.id!} index={i}>
+									{(drag, snapshot) => (
+										<div
+											ref={drag.innerRef}
+											{...drag.draggableProps}
+											{...drag.dragHandleProps}
+											className={`relative px-6 py-4 rounded-lg cursor-move text-white select-none
+                  							${snapshot.isDragging ? "ring-2 ring-blue-400 scale-105" : "bg-gray-700 hover:bg-gray-600"}`}
+										>
+											<button
+												onClick={(ev) => {
+													ev.stopPropagation();
+													deleteChord(i);
+												}}
+												className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
+											>
+												✕
+											</button>
 
-						{/* Hidden notes for later use */}
-						<div className="hidden">
-							{JSON.stringify(chord.notes)}
+											<div
+												onClick={() => {
+													setActiveNotes(chord.notes);
+													chord.notes.forEach((n) => {
+														const freq = noteToFreq(n);
+														if (freq !== null) playTone(freq, 0.8);
+													});
+												}}
+												className="font-semibold text-center"
+											>
+												{chord.label}
+											</div>
+										</div>
+									)}
+								</Draggable>
+							))}
+							{provided.placeholder}
 						</div>
-					</div>
-				))}
-			</div>
+					)}
+				</Droppable>
+			</DragDropContext>
 		</div>
 	);
 }

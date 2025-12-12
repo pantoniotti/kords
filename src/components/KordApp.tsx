@@ -1,9 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 import { detect as detectChord } from "@tonaljs/chord-detect";
 import { Note } from "@tonaljs/tonal";
+import Keyboard from "./Keyboard"; 
 import SavedChordsPanel from "./SavedChordsPanel";
+import ChordTimeline from "./ChordsTimeline";
 import ChordImportExport from "./ChordImportExport";
-import Keyboard from "./Keyboard";
+import ChordDisplay from "./ChordDisplay";
+
 
 //////// CONSTANTS & HELPERS ///////
 
@@ -250,19 +253,13 @@ export default function KordApp() {
 				whiteKeyWidth={whiteKeyWidth}
 			/>
 
-			<div
-				id="chord-display"
-				draggable={!!currentChord}
-				onDragStart={(e) => {
-					if (!currentChord) return;
-					// Use the explicit application/chord MIME so the saved panel knows how to parse it
-					e.dataTransfer.setData("application/chord", JSON.stringify(currentChord));
-				}}
-				onClick={() => activeNotes.forEach(n => playTone(noteToFreq(n), 1))}
-				className="mt-4 p-4 bg-green-500 text-white rounded-lg text-2xl font-bold text-center w-full max-w-[300px] shadow-lg cursor-move"
-			>
-				{chordName}
-			</div>
+			<ChordDisplay
+				chord={currentChord}
+				chordName={chordName}
+				activeNotes={activeNotes}
+				playTone={playTone}
+				noteToFreq={noteToFreq}
+			/>
 
 			<SavedChordsPanel
 				savedChords={savedChords}
@@ -270,6 +267,13 @@ export default function KordApp() {
 				setActiveNotes={setActiveNotes}
 				playTone={playTone}
 				noteToFreq={noteToFreq}
+			/>
+
+			<ChordTimeline
+				timeline={savedChords}
+				setTimeline={setSavedChords}
+				noteToFreq={noteToFreq}
+				width={`${visibleWhiteKeys.length * whiteKeyWidth}px`}  // SAME AS KEYBOARD
 			/>
 
 			<div className="mt-4">

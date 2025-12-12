@@ -1,6 +1,4 @@
-import React from "react";
-
-interface KeyboardProps {
+interface Props {
 	visibleKeys: string[];
 	visibleWhiteKeys: string[];
 	blackKeyPositions: { note: string; leftPosition: number }[];
@@ -9,14 +7,14 @@ interface KeyboardProps {
 	whiteKeyWidth: number;
 }
 
-const Keyboard: React.FC<KeyboardProps> = ({
+export default function Keyboard ({
 	visibleKeys,
 	visibleWhiteKeys,
 	blackKeyPositions,
 	activeNotes,
 	toggleNote,
 	whiteKeyWidth
-}) => {
+}: Props) {
 	return (
 		<div className="w-full flex flex-col items-center">
 			<div id="keyboard-wrapper" className="p-4 bg-gray-800 rounded-xl shadow-lg">
@@ -76,5 +74,3 @@ const Keyboard: React.FC<KeyboardProps> = ({
 		</div>
 	);
 };
-
-export default Keyboard;

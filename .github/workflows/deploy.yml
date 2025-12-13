@@ -1,31 +1,41 @@
 name: Deploy to GitHub Pages
 
+# Trigger deployment on push to main (or your default branch)
 on:
   push:
     branches:
-      - main  # or your main development branch
+      - main
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+
     steps:
+      # Step 1: Checkout the repository
       - name: Checkout repository
         uses: actions/checkout@v3
 
+      # Step 2: Setup Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 20
 
+      # Step 3: Install dependencies
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
-      - name: Build
+      # Step 4: Build Vite project
+      - name: Build project
         run: npm run build
 
+      # Step 5: Deploy to GitHub Pages
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./dist  # for Vite use ./dist, for CRA use ./build
+          publish_dir: ./dist
+          # Optional: set a custom branch, default is gh-pages
           publish_branch: gh-pages
+          # Optional: keep commit history
+          keep_files: false

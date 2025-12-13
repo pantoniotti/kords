@@ -26,9 +26,11 @@ type Props = {
 	noteToFreq: (note?: string) => number | null; // kept for compatibility
 	width: string;
 	audioEngine: AudioEngine; // optional: engine passed from parent
+	playSequence: () => void; // Added playSequence property
+	stopSequence: () => void; // Added stopSequence property
 };
 
-export default function ChordTimeline({ timeline, setTimeline, width, audioEngine }: Props) {
+export default function ChordTimeline({ timeline, setTimeline, width, audioEngine, playSequence, stopSequence }: Props) {
 	const [playingIndex, setPlayingIndex] = useState<number | null>(null);
 	const [bpm, setBpm] = useState(128);
 	const [loop, setLoop] = useState(true);
@@ -61,35 +63,11 @@ export default function ChordTimeline({ timeline, setTimeline, width, audioEngin
 	const playChordAt = (index: number) => {
 		const chord = timeline[index];
 		if (!chord) return;
-		// use audioEngine if available
 		if (audioEngine) {
+			audioEngine.stopSequence(); // stop looping
 			audioEngine.playChord({ notes: chord.notes, durationBeats: chord.duration ?? 1 });
-		} else {
-			// fallback: nothing (you had playTone before)
 		}
 		setPlayingIndex(index);
-	};
-
-	const stopSequence = () => {
-		if (timeoutRef.current != null) {
-			window.clearTimeout(timeoutRef.current);
-			timeoutRef.current = null;
-		}
-		if (audioEngine) audioEngine.stopSequence();
-		setPlayingIndex(null);
-	};
-
-	const playSequence = (start = 0) => {
-		if (!timeline.length) return;
-		stopSequence();
-		if (audioEngine) {
-			// convert to AudioChord[] and use engine's sequence
-			const audioChords = timeline.map((c) => ({ notes: c.notes, durationBeats: c.duration ?? 1 }));
-			audioEngine.playSequence(audioChords, start, loop);
-			setPlayingIndex(start);
-		} else {
-			// fallback scheduling using setTimeout (not recommended)
-		}
 	};
 
 	const onDragStart = (_start: DragStart) => { };
@@ -210,14 +188,25 @@ export default function ChordTimeline({ timeline, setTimeline, width, audioEngin
 														{...drag.draggableProps}
 														{...drag.dragHandleProps}
 														data-tl-item
-														className={`relative px-6 py-6 w-[120px] text-center rounded-xl cursor-pointer text-white select-none transition-transform ${snapshot.isDragging ? "ring-2 ring-blue-400" : ""
-															}`}
+														className={`relative px-6 py-6 w-[120px] text-center rounded-xl cursor-pointer text-white select-none transition-transform ${snapshot.isDragging ? "ring-2 ring-blue-400" : ""}`}
 														style={{
 															backgroundColor: bg,
 															...drag.draggableProps.style,
 														}}
+														onMouseDown={(e) => e.preventDefault()} // prevent unwanted focus/selection
 														onClick={() => {
-															playChordAt(index);
+															if (!audioEngine) return;
+
+															// Stop any ongoing sequence
+															audioEngine.stopSequence();
+
+															// Play this chord
+															audioEngine.playChord({ notes: chord.notes, durationBeats: chord.duration ?? 1 });
+
+															// Notify KordApp to highlight notes and update display
+															if (playSequence) {
+																playSequence(chord.notes);
+															}
 														}}
 													>
 														<button

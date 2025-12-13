@@ -1,3 +1,4 @@
+// src/KordApp.tsx
 import { useEffect, useRef, useState } from "react";
 import { detect as detectChord } from "@tonaljs/chord-detect";
 import { Note } from "@tonaljs/tonal";
@@ -53,7 +54,7 @@ export default function KordApp() {
 		setChordName(matches.length ? matches[0] : "—");
 	}, [activeNotes]);
 
-	// ---------------- NOTE HANDLERS ----------------
+	// ------------------ NOTE HANDLERS ----------------
 	const handleIncomingNote = (note: string) => {
 		if (!note) return;
 		pressedNotes.current.add(note);
@@ -61,19 +62,57 @@ export default function KordApp() {
 		if (chordTimer.current) clearTimeout(chordTimer.current);
 		chordTimer.current = setTimeout(() => {
 			const notes = Array.from(pressedNotes.current);
-			pressedNotes.current.clear();
 
-			setActiveNotes(prev => {
-				let merged: string[];
-				if (notes.length > 1) merged = notes;
-				else if (notes.length === 1) {
-					merged = prev.includes(notes[0]) ? prev.filter(n => n !== notes[0]) : [...prev, notes[0]];
-				} else merged = prev;
-				return sortNotesByPitch(merged);
-			});
+			// Reset activeNotes to only the new chord
+			setActiveNotes(sortNotesByPitch(notes));
 
-			notes.forEach(n => audioEngineRef.current.playNote(n, 0.5));
+			// Play the notes
+			notes.forEach(n => startNoteHold(n));
+
+			// Keep pressedNotes for holding
+			// pressedNotes.current.clear(); // do NOT clear here, so holds work
 		}, CHORD_THRESHOLD);
+	};
+
+	// --------------- SEQUENCE HANDLERS --------------
+	const [loop, _setLoop] = useState(true); // controls sequence looping
+
+	const handleSequencePlay = (start = 0) => {
+		if (!savedChords.length) return;
+
+		audioEngineRef.current.playSequence(
+			savedChords.map(c => ({ notes: c.notes, durationBeats: c.duration ?? 1 })),
+			start,
+			loop,
+			(chord, _index) => {
+				setActiveNotes(sortNotesByPitch(chord.notes)); // highlight keyboard
+				const matches = detectChord(chord.notes);
+				setChordName(matches.length ? matches[0] : "—"); // update ChordDisplay
+			}
+		);
+	};
+
+	const stopSequence = () => {
+		audioEngineRef.current.stopSequence();
+		setActiveNotes([]); // reset keyboard highlight
+	};
+
+	const startNoteHold = (note: string) => {
+		if (!pressedNotes.current.has(note)) {
+			pressedNotes.current.add(note);
+		}
+		// play with long duration; will stop manually on keyup
+		audioEngineRef.current.playNote(note, 60);
+	};
+
+	const stopNoteHold = (note: string) => {
+		pressedNotes.current.delete(note);
+		audioEngineRef.current.stopNote(note);
+	};
+
+	const playNoteOnce = (note: string) => {
+		audioEngineRef.current.stopSequence();
+		audioEngineRef.current.playNote(note, 0.5);
 	};
 
 	// ---------------- KEYBOARD / OCTAVE ----------------
@@ -94,7 +133,7 @@ export default function KordApp() {
 		const handleKeyUp = (e: KeyboardEvent) => {
 			const note = getNoteFromKey(e.key.toLowerCase());
 			if (!note) return;
-			pressedNotes.current.delete(note);
+			stopNoteHold(note);
 		};
 		window.addEventListener("keydown", handleKeyDown);
 		window.addEventListener("keyup", handleKeyUp);
@@ -119,7 +158,7 @@ export default function KordApp() {
 						if (!pressedNotes.current.has(note)) handleIncomingNote(note);
 					}
 					if (status === 128 || (status === 144 && velocity === 0)) { // note off
-						pressedNotes.current.delete(note);
+						stopNoteHold(note);
 					}
 				};
 			}
@@ -132,6 +171,7 @@ export default function KordApp() {
 	const visibleWhiteKeys = visibleKeys.filter(k => !k.includes("#"));
 
 	const blackKeyPositions: { note: string; leftPosition: number }[] = [];
+
 	visibleKeys.forEach(key => {
 		if (!key.includes("#")) return;
 		const pred = KEYS[KEYS.indexOf(key) - 1];
@@ -170,10 +210,11 @@ export default function KordApp() {
 				toggleNote={(note: string) => {
 					setActiveNotes(prev => {
 						const updated = prev.includes(note) ? prev.filter(n => n !== note) : [...prev, note];
-						audioEngineRef.current.playNote(note, 0.5);
+						playNoteOnce(note); // play single note
 						return sortNotesByPitch(updated);
 					});
 				}}
+
 				whiteKeyWidth={whiteKeyWidth}
 				audioEngine={audioEngineRef.current}
 			/>
@@ -186,6 +227,8 @@ export default function KordApp() {
 				noteToFreq={() => null}
 				width={`${visibleWhiteKeys.length * whiteKeyWidth}px`}
 				audioEngine={audioEngineRef.current}
+				playSequence={handleSequencePlay}
+				stopSequence={stopSequence}
 			/>
 
 			<div className="mt-4">

@@ -21,12 +21,15 @@ export default function Keyboard({
 }: Props) {
 	return (
 		<div id="keyboard-wrapper" className="p-4 bg-gray-800 rounded-xl shadow-lg">
-			<div className="relative mx-auto" style={{ width: `${visibleWhiteKeys.length * whiteKeyWidth}px`, height: "200px" }}>
+			<div
+				className="relative mx-auto"
+				style={{ width: `${visibleWhiteKeys.length * whiteKeyWidth}px`, height: "200px" }}
+			>
 				<div className="flex">
-					{visibleWhiteKeys.map(note => (
+					{visibleWhiteKeys.map((note) => (
 						<div
 							key={note}
-							onClick={() => { toggleNote(note); audioEngine.playNote(note, 0.6); }}
+							onClick={() => toggleNote(note)}
 							className={`w-[48px] h-[192px] border border-gray-300 rounded-b-lg relative z-0 cursor-pointer transition shadow-md ${activeNotes.includes(note) ? "bg-blue-400" : "bg-white"}`}
 						/>
 					))}
@@ -35,9 +38,9 @@ export default function Keyboard({
 				{blackKeyPositions.map(({ note, leftPosition }) => (
 					<div
 						key={note}
-						onClick={() => { toggleNote(note); audioEngine.playNote(note, 0.6); }}
+						onClick={() => toggleNote(note)}
 						className={`w-[32px] h-[128px] absolute top-0 z-10 rounded-b-md cursor-pointer transition shadow-2xl ${activeNotes.includes(note) ? "bg-blue-800" : "bg-black"}`}
-						style={{ left: `${leftPosition}px` }}
+						style={{ left: `${leftPosition}px`, top: 0 }}
 					/>
 				))}
 			</div>
@@ -46,6 +49,7 @@ export default function Keyboard({
 				<div className="p-2 bg-gray-700 text-white rounded text-center w-full sm:w-[48%]">
 					Octaves: {visibleKeys[0]?.slice(-1)} – {visibleKeys[visibleKeys.length - 1]?.slice(-1)}
 				</div>
+
 				<div className="p-2 bg-gray-700 text-white rounded text-center w-full sm:w-[48%]">
 					Notes: {activeNotes.join(" • ") || ""}
 				</div>

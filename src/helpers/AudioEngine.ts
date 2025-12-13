@@ -14,9 +14,9 @@ export class AudioEngine {
     private activeOscillators: Map<string, OscillatorNode> = new Map();
     private sequenceTimeouts: number[] = [];
 
-    constructor(bpm = 120, autoplay = true, sound: SoundType = "sine") {
-        this.context = new (window.AudioContext || (window as any).webkitAudioContext)();
-        if (autoplay && this.context.state === "suspended") this.context.resume();
+    constructor(bpm = 120, sound: SoundType = "sine") {
+        this.context = new AudioContext({ latencyHint: "interactive" });
+        
         this.bpm = bpm;
         this.sound = sound;
         this.gainNode = this.context.createGain();
@@ -39,6 +39,8 @@ export class AudioEngine {
     }
 
     playNote(note: string, durationSec: number) {
+        this.resumeContext(); // 🔑 ensure context is running
+
         this.stopNote(note);
         const osc = this.context.createOscillator();
         osc.type = this.sound;
@@ -61,14 +63,53 @@ export class AudioEngine {
         }
     }
 
-    playChord({ notes, durationBeats }: Chord) {
-        const seconds = (60 / this.bpm) * durationBeats;
-        notes.forEach(n => this.playNote(n, seconds));
+    playChord(chord: Chord) {
+        this.resumeContext();
+        if (this.context.state !== "running") return; // wait for user gesture
+        this.stopAllNotes();
+        const seconds = (60 / this.bpm) * chord.durationBeats;
+        chord.notes.forEach(n => this.playNote(n, seconds));
+    }
+
+    playSequence(
+        chords: { notes: string[]; durationBeats: number }[],
+        startIndex = 0,
+        loop = true,
+        onStep?: (chord: { notes: string[] }, index: number) => void
+    ) {
+        if (this.sequenceTimeouts.length) this.stopSequence();
+
+        const schedule = (index: number) => {
+            if (!chords[index]) {
+                if (loop) schedule(0);
+                return;
+            }
+
+            this.stopAllNotes(); // 🔑 prevents renderer crash
+
+            const chord = chords[index];
+
+            this.playChord(chord);
+            onStep?.(chord, index);
+
+            const durationMs = (60 / this.bpm) * chord.durationBeats * 1000;
+
+            const id = window.setTimeout(
+                () => schedule(index + 1),
+                durationMs
+            );
+
+            this.sequenceTimeouts.push(id);
+        };
+
+        schedule(startIndex);
     }
 
     stopSequence() {
         this.sequenceTimeouts.forEach(id => clearTimeout(id));
         this.sequenceTimeouts = [];
+        this.stopAllNotes(); // 🔑
+
         this.activeOscillators.forEach(osc => {
             try { osc.stop(); } catch { }
             osc.disconnect();
@@ -76,31 +117,23 @@ export class AudioEngine {
         this.activeOscillators.clear();
     }
 
-    playSequence(
-        chords: Chord[],
-        startIndex = 0,
-        loop = true,
-        onStep?: (chord: Chord, index: number) => void
-    ) {
-        this.stopSequence();
-        let stopped = false;
-
-        const schedule = (index: number) => {
-            if (stopped || !chords[index]) return;
-            const chord = chords[index];
-            this.playChord(chord);
-            if (onStep) onStep(chord, index);
-
-            const durationMs = (60 / this.bpm) * chord.durationBeats * 1000;
-            const nextIndex = index + 1;
-            if (nextIndex >= chords.length && !loop) return;
-
-            const id = window.setTimeout(() => schedule(nextIndex % chords.length), durationMs);
-            this.sequenceTimeouts.push(id);
-        };
-
-        schedule(startIndex);
-
-        return () => { stopped = true; this.stopSequence(); };
+    resumeContext() {
+        if (this.context.state === "suspended") {
+            this.context.resume().catch(err => console.error("Failed to resume AudioContext:", err));
+        }
     }
+
+    panic() {
+        this.stopSequence();
+        this.stopAllNotes();
+    }
+
+    stopAllNotes() {
+        this.activeOscillators.forEach(osc => {
+            try { osc.stop(); } catch { }
+            osc.disconnect();
+        });
+        this.activeOscillators.clear();
+    }
+
 }

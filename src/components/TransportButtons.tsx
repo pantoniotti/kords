@@ -1,4 +1,5 @@
 // src/components/TransportButtons.tsx
+import type { AudioEngine } from "../helpers/AudioEngine";
 import RippleButton from "./RippleButton";
 import { SkipBack, Play, Square, SkipForward } from "lucide-react";
 
@@ -6,21 +7,21 @@ type Props = {
     playingIndex: number | null;
     timelineLength: number;
     playSequence: (start?: number) => void;
-    stopSequence: () => void;
+    audioEngine: AudioEngine;
 };
 
 export default function TransportButtons({
     playingIndex,
     timelineLength,
     playSequence,
-    stopSequence,
+    audioEngine,
 }: Props) {
     return (
         <div className="flex items-center gap-3">
             <RippleButton
                 className="bg-gray-700 hover:bg-gray-600 rounded-xl"
                 onClick={() => {
-                    stopSequence();
+                    audioEngine.stopSequence();
                     playSequence(
                         playingIndex != null
                             ? Math.max(playingIndex - 1, 0)
@@ -34,7 +35,7 @@ export default function TransportButtons({
             <RippleButton
                 className="bg-green-500 hover:bg-green-400 rounded-xl"
                 onClick={() => {
-                    stopSequence();
+                    audioEngine.stopSequence();
                     playSequence(playingIndex ?? 0);
                 }}
             >
@@ -43,7 +44,7 @@ export default function TransportButtons({
 
             <RippleButton
                 className="bg-red-600 hover:bg-red-500 rounded-xl"
-                onClick={stopSequence}
+                onClick={audioEngine.stopSequence.bind(audioEngine)}
             >
                 <Square size={20} />
             </RippleButton>
@@ -51,7 +52,7 @@ export default function TransportButtons({
             <RippleButton
                 className="bg-gray-700 hover:bg-gray-600 rounded-xl"
                 onClick={() => {
-                    stopSequence();
+                    audioEngine.stopSequence();
                     playSequence(
                         playingIndex == null
                             ? 0
@@ -61,6 +62,15 @@ export default function TransportButtons({
             >
                 <SkipForward size={20} />
             </RippleButton>
+
+            <button
+                onClick={() => {
+                    audioEngine.panic();
+                }}
+                className="px-3 py-1 bg-red-700 hover:bg-red-600 rounded text-white font-bold"
+            >
+                STOP
+            </button>
         </div>
     );
 }

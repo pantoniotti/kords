@@ -25,18 +25,21 @@ type Props = {
 	setTimeline: (updater: SavedChord[] | ((p: SavedChord[]) => SavedChord[])) => void;
 	noteToFreq: (note?: string) => number | null; // kept for compatibility
 	width: string;
-	audioEngine: AudioEngine; // optional: engine passed from parent
-	playSequence: () => void; // Added playSequence property
-	stopSequence: () => void; // Added stopSequence property
+	audioEngine: AudioEngine;
+	playSequence: () => void;
+	onPreviewChord: (chord: SavedChord) => void;
+	loop: boolean;
+	setLoop: (v: boolean) => void;
+	playheadIndex: number | null;
 };
 
-export default function ChordTimeline({ timeline, setTimeline, width, audioEngine, playSequence, stopSequence }: Props) {
-	const [playingIndex, setPlayingIndex] = useState<number | null>(null);
+export default function ChordTimeline({ 
+		timeline, setTimeline, width, audioEngine, playSequence, onPreviewChord, loop, setLoop, playheadIndex
+	}: Props) {
+	const [playingIndex, _setPlayingIndex] = useState<number | null>(null);
 	const [bpm, setBpm] = useState(128);
-	const [loop, setLoop] = useState(true);
 	const containerRef = useRef<HTMLDivElement | null>(null);
 	const altKeyRef = useRef(false);
-	const timeoutRef = useRef<number | null>(null);
 
 	// sound selection (keeps engine and timeline consistent)
 	const [sound, setSound] = useState<SoundType>("sine");
@@ -60,15 +63,6 @@ export default function ChordTimeline({ timeline, setTimeline, width, audioEngin
 		};
 	}, []);
 
-	const playChordAt = (index: number) => {
-		const chord = timeline[index];
-		if (!chord) return;
-		if (audioEngine) {
-			audioEngine.stopSequence(); // stop looping
-			audioEngine.playChord({ notes: chord.notes, durationBeats: chord.duration ?? 1 });
-		}
-		setPlayingIndex(index);
-	};
 
 	const onDragStart = (_start: DragStart) => { };
 	const onDragEnd = (result: DropResult) => {
@@ -137,7 +131,7 @@ export default function ChordTimeline({ timeline, setTimeline, width, audioEngin
 					playingIndex={playingIndex}
 					timelineLength={timeline.length}
 					playSequence={playSequence}
-					stopSequence={stopSequence}
+					audioEngine={audioEngine}
 				/>
 
 				<div className="ml-4">
@@ -179,6 +173,7 @@ export default function ChordTimeline({ timeline, setTimeline, width, audioEngin
 									{timeline.map((chord, index) => {
 										const id = chord.id ?? index.toString();
 										const bg = chord.color ?? "#4b5563";
+										const isPlaying = playheadIndex === index;
 
 										return (
 											<Draggable key={id} draggableId={id} index={index}>
@@ -188,27 +183,32 @@ export default function ChordTimeline({ timeline, setTimeline, width, audioEngin
 														{...drag.draggableProps}
 														{...drag.dragHandleProps}
 														data-tl-item
-														className={`relative px-6 py-6 w-[120px] text-center rounded-xl cursor-pointer text-white select-none transition-transform ${snapshot.isDragging ? "ring-2 ring-blue-400" : ""}`}
+														className={`
+															relative px-6 py-6 w-[120px] text-center rounded-xl cursor-pointer text-white select-none 
+															transition-transform ${snapshot.isDragging ? "ring-2 ring-blue-400" : ""}
+															${isPlaying ? "ring-1 ring-white-400 scale-105" : ""}
+														`}
 														style={{
 															backgroundColor: bg,
+															marginLeft: 5,
 															...drag.draggableProps.style,
 														}}
 														onMouseDown={(e) => e.preventDefault()} // prevent unwanted focus/selection
 														onClick={() => {
 															if (!audioEngine) return;
 
-															// Stop any ongoing sequence
+															// Stop any running sequence
 															audioEngine.stopSequence();
 
-															// Play this chord
-															audioEngine.playChord({ notes: chord.notes, durationBeats: chord.duration ?? 1 });
+															// Play this chord ONCE
+															audioEngine.playChord({
+																notes: chord.notes,
+																durationBeats: chord.duration ?? 1,
+															});
 
-															// Notify KordApp to highlight notes and update display
-															if (playSequence) {
-																playSequence(chord.notes);
-															}
-														}}
-													>
+															// Notify parent (KordApp) to update keyboard + display
+															onPreviewChord(chord);
+														}}													>
 														<button
 															className="absolute -top-1 -right-1 bg-red-600 hover:bg-red-500 rounded-full w-6 h-6 flex items-center justify-center text-xs shadow"
 															onClick={(ev) => {

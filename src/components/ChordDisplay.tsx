@@ -20,6 +20,7 @@ export default function ChordDisplay({ chord, chordName, audioEngine }: Props) {
             onMouseDown={() => {
                 // preview chord using audio engine
                 if (!chord) return;
+                audioEngine.stopSequence();
                 audioEngine.playChord({ notes: chord.notes, durationBeats: 1 });
             }}
             className="mt-4 p-4 bg-green-500 text-white rounded-lg text-2xl font-bold text-center w-full max-w-[300px] shadow-lg cursor-move"

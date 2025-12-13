@@ -40,88 +40,31 @@ export default function KordApp() {
 	const [chordName, setChordName] = useState<string>("—");
 	const [baseOctave, setBaseOctave] = useState(3);
 	const [savedChords, setSavedChords] = useState<any[]>([]);
+	const [loop, setLoop] = useState(false); // controls sequence looping
 
 	const chordTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const pressedNotes = useRef<Set<string>>(new Set());
+	const [playheadIndex, setPlayheadIndex] = useState<number | null>(null); // for chods playhead
 
-	// audio engine
-	const audioEngineRef = useRef<AudioEngine>(new AudioEngine(120, true, "sine"));
+	const startIndex = Math.min(Math.max(0, KEYS.findIndex(k => parseInt(k.slice(-1)) === baseOctave)), KEYS.length - VISIBLE_KEYS_COUNT);
+	const visibleKeys = KEYS.slice(startIndex, startIndex + VISIBLE_KEYS_COUNT);
+	const visibleWhiteKeys = visibleKeys.filter(k => !k.includes("#"));
 
-	// ---------------- CHORD DETECTION ----------------
+	const blackKeyPositions: { note: string; leftPosition: number }[] = [];
+	const keyBoardWith = `${visibleWhiteKeys.length * whiteKeyWidth}px`
+
+	// Audio engine
+	const audioEngineRef = useRef<AudioEngine>(new AudioEngine(120, "sine"));
+
+
+	// ---------------- Chord Detection ----------------
 	useEffect(() => {
 		if (activeNotes.length === 0) { setChordName("—"); return; }
 		const matches = detectChord(sortNotesByPitch(activeNotes));
 		setChordName(matches.length ? matches[0] : "—");
 	}, [activeNotes]);
 
-	// ------------------ NOTE HANDLERS ----------------
-	const handleIncomingNote = (note: string) => {
-		if (!note) return;
-		pressedNotes.current.add(note);
-
-		if (chordTimer.current) clearTimeout(chordTimer.current);
-		chordTimer.current = setTimeout(() => {
-			const notes = Array.from(pressedNotes.current);
-
-			// Reset activeNotes to only the new chord
-			setActiveNotes(sortNotesByPitch(notes));
-
-			// Play the notes
-			notes.forEach(n => startNoteHold(n));
-
-			// Keep pressedNotes for holding
-			// pressedNotes.current.clear(); // do NOT clear here, so holds work
-		}, CHORD_THRESHOLD);
-	};
-
-	// --------------- SEQUENCE HANDLERS --------------
-	const [loop, _setLoop] = useState(true); // controls sequence looping
-
-	const handleSequencePlay = (start = 0) => {
-		if (!savedChords.length) return;
-
-		audioEngineRef.current.playSequence(
-			savedChords.map(c => ({ notes: c.notes, durationBeats: c.duration ?? 1 })),
-			start,
-			loop,
-			(chord, _index) => {
-				setActiveNotes(sortNotesByPitch(chord.notes)); // highlight keyboard
-				const matches = detectChord(chord.notes);
-				setChordName(matches.length ? matches[0] : "—"); // update ChordDisplay
-			}
-		);
-	};
-
-	const stopSequence = () => {
-		audioEngineRef.current.stopSequence();
-		setActiveNotes([]); // reset keyboard highlight
-	};
-
-	const startNoteHold = (note: string) => {
-		if (!pressedNotes.current.has(note)) {
-			pressedNotes.current.add(note);
-		}
-		// play with long duration; will stop manually on keyup
-		audioEngineRef.current.playNote(note, 60);
-	};
-
-	const stopNoteHold = (note: string) => {
-		pressedNotes.current.delete(note);
-		audioEngineRef.current.stopNote(note);
-	};
-
-	const playNoteOnce = (note: string) => {
-		audioEngineRef.current.stopSequence();
-		audioEngineRef.current.playNote(note, 0.5);
-	};
-
-	// ---------------- KEYBOARD / OCTAVE ----------------
-	const getNoteFromKey = (key: string) => {
-		if (BASE_KEYBOARD[key]) return BASE_KEYBOARD[key] + baseOctave;
-		if (EXTRA_KEYBOARD[key]) return EXTRA_KEYBOARD[key] + (baseOctave + 1);
-		return null;
-	};
-
+	// ---------------- Keyboard Detection ----------------
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
 			if (e.key === "z") { setBaseOctave(prev => Math.max(1, prev - 1)); return; }
@@ -143,7 +86,20 @@ export default function KordApp() {
 		};
 	}, [baseOctave]);
 
-	// ---------------- MIDI ----------------
+	useEffect(() => {
+		const resume = () => audioEngineRef.current.resumeContext();
+		window.addEventListener("keydown", resume, { once: true });
+		window.addEventListener("mousedown", resume, { once: true });
+		window.addEventListener("touchstart", resume, { once: true });
+		return () => {
+			window.removeEventListener("keydown", resume);
+			window.removeEventListener("mousedown", resume);
+			window.removeEventListener("touchstart", resume);
+		};
+	}, []);
+
+
+	// ---------------- Midi detection ----------------
 	useEffect(() => {
 		if (!navigator.requestMIDIAccess) return;
 		navigator.requestMIDIAccess().then(midi => {
@@ -165,13 +121,81 @@ export default function KordApp() {
 		});
 	}, []);
 
-	// ---------------- SLIDING WINDOW ----------------
-	const startIndex = Math.min(Math.max(0, KEYS.findIndex(k => parseInt(k.slice(-1)) === baseOctave)), KEYS.length - VISIBLE_KEYS_COUNT);
-	const visibleKeys = KEYS.slice(startIndex, startIndex + VISIBLE_KEYS_COUNT);
-	const visibleWhiteKeys = visibleKeys.filter(k => !k.includes("#"));
+	// ------------------ Note Handlers ----------------
+	const handleIncomingNote = (note: string) => {
+		if (!note) return;
 
-	const blackKeyPositions: { note: string; leftPosition: number }[] = [];
+		pressedNotes.current.add(note);
 
+		if (chordTimer.current) clearTimeout(chordTimer.current);
+		chordTimer.current = setTimeout(() => {
+			const notes = Array.from(pressedNotes.current);
+
+			// Reset activeNotes to only the new chord
+			setActiveNotes(sortNotesByPitch(notes));
+
+			// Play the notes
+			notes.forEach(n => startNoteHold(n));
+		}, CHORD_THRESHOLD);
+	};
+
+	// --------------- Sequence Handlers --------------
+	const handleSequencePlay = (startIndex = 0, loop: boolean) => {
+		if (!savedChords.length) return;
+
+		const engineChords = savedChords.map(c => ({
+			notes: c.notes,
+			durationBeats: c.duration ?? 1, 
+		}));
+
+		audioEngineRef.current.playSequence(
+			engineChords,
+			startIndex,
+			loop,
+			(chord, index) => {
+				setPlayheadIndex(index);
+				setActiveNotes(sortNotesByPitch(chord.notes));
+				const matches = detectChord(chord.notes);
+				setChordName(matches.length ? matches[0] : "—");
+			}
+		);
+	};
+
+	// --------------- Note Play Handlers --------------
+	const handlePreviewChord = (chord: { notes: string[] }) => {
+		setActiveNotes(sortNotesByPitch(chord.notes));
+
+		const matches = detectChord(chord.notes);
+		setChordName(matches.length ? matches[0] : "—");
+	};
+
+	const startNoteHold = (note: string) => {
+		if (!pressedNotes.current.has(note)) {
+			pressedNotes.current.add(note);
+		}
+		// play with long duration; will stop manually on keyup
+		audioEngineRef.current.playNote(note, 60);
+	};
+
+	const stopNoteHold = (note: string) => {
+		pressedNotes.current.delete(note);
+		audioEngineRef.current.stopNote(note);
+	};
+
+	const playNoteOnce = (note: string) => {
+		audioEngineRef.current.stopSequence();
+		audioEngineRef.current.playNote(note, 0.5);
+	};
+
+
+	// ---------------- Keyboard / Octave ----------------
+	const getNoteFromKey = (key: string) => {
+		if (BASE_KEYBOARD[key]) return BASE_KEYBOARD[key] + baseOctave;
+		if (EXTRA_KEYBOARD[key]) return EXTRA_KEYBOARD[key] + (baseOctave + 1);
+		return null;
+	};
+
+	// ---------------- Sliding Window ----------------
 	visibleKeys.forEach(key => {
 		if (!key.includes("#")) return;
 		const pred = KEYS[KEYS.indexOf(key) - 1];
@@ -184,7 +208,7 @@ export default function KordApp() {
 		blackKeyPositions.push({ note: key, leftPosition: idx * whiteKeyWidth + offset });
 	});
 
-	// ---------------- HELPERS ----------------
+	// ---------------- Helpers ----------------
 	function midiNoteToName(midi: number): string | null {
 		const NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 		if (midi < 0 || midi > 127) return null;
@@ -197,7 +221,7 @@ export default function KordApp() {
 		? { label: chordName, notes: activeNotes }
 		: null;
 
-	// ---------------- RENDER ----------------
+	// ---------------- Render ----------------
 	return (
 		<div className="bg-gray-900 min-h-screen p-8 text-white flex flex-col items-center">
 			<h1 className="text-3xl font-bold mb-6 text-center">🎹 Chord Tool</h1>
@@ -225,10 +249,13 @@ export default function KordApp() {
 				timeline={savedChords}
 				setTimeline={setSavedChords}
 				noteToFreq={() => null}
-				width={`${visibleWhiteKeys.length * whiteKeyWidth}px`}
+				width={keyBoardWith}
 				audioEngine={audioEngineRef.current}
-				playSequence={handleSequencePlay}
-				stopSequence={stopSequence}
+				playSequence={() => handleSequencePlay(0, loop)}
+				onPreviewChord={handlePreviewChord}
+				loop={loop}
+				setLoop={setLoop}
+				playheadIndex={playheadIndex}
 			/>
 
 			<div className="mt-4">

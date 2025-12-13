@@ -1,124 +1,224 @@
-export type SoundType = "piano" | "synth" | "organ";
+// src/helpers/AudioEngine.ts
+export type SoundType = "sine" | "sawtooth" | "fm-piano" | "pad";
 
-export type Chord = {
+export type AudioChord = {
     notes: string[];
     durationBeats?: number;
 };
 
+type EngineState = {
+    bpm: number;
+    sound: SoundType;
+    loop: boolean;
+};
+
 export class AudioEngine {
-    private audioCtx: AudioContext;
-    private currentSound: SoundType = "piano";
-    private loop = true;
-    private bpm = 120;
-    private timeoutRef: number | null = null;
+    private ctx: AudioContext;
+    private state: EngineState;
 
-    constructor(bpm: number = 120, loop: boolean = true) {
-        this.audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-        this.bpm = bpm;
-        this.loop = loop;
-    }
+    private seqTimeout: number | null = null;
+    private sequenceIndex = 0;
+    private isPlayingSequence = false;
 
-    setSound(sound: SoundType) {
-        this.currentSound = sound;
+    // NEW → allows playSequence() to override the global loop
+    private activeSequenceLoop = false;
+
+    constructor(initialBpm = 120, initialLoop = true, initialSound: SoundType = "sine") {
+        this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        this.state = {
+            bpm: initialBpm,
+            sound: initialSound,
+            loop: initialLoop
+        };
     }
 
     setBpm(bpm: number) {
-        this.bpm = Math.max(1, bpm);
+        this.state.bpm = Math.max(1, Math.round(bpm));
+    }
+
+    setSound(sound: SoundType) {
+        this.state.sound = sound;
     }
 
     setLoop(loop: boolean) {
-        this.loop = loop;
+        this.state.loop = loop;
     }
 
-    private getStepMs() {
-        return 60000 / this.bpm;
+    resumeIfNeeded() {
+        if (this.ctx.state === "suspended") return this.ctx.resume();
+        return Promise.resolve();
     }
 
-    private noteToFreq(note: string): number | null {
-        // Simple A440 mapping for demo; ideally you provide your noteToFreq
+    private noteToFreq(note?: string) {
+        if (!note) return null;
         const A4 = 440;
-        const noteMap: Record<string, number> = {
-            "C4": -9, "C#4": -8, "D4": -7, "D#4": -6, "E4": -5, "F4": -4,
-            "F#4": -3, "G4": -2, "G#4": -1, "A4": 0, "A#4": 1, "B4": 2,
+        const NOTES: Record<string, number> = {
+            C: 0, "C#": 1, D: 2, "D#": 3, E: 4, F: 5, "F#": 6,
+            G: 7, "G#": 8, A: 9, "A#": 10, B: 11
         };
-        if (!(note in noteMap)) return null;
-        return A4 * Math.pow(2, noteMap[note] / 12);
+
+        const m = note.match(/^([A-G]#?)(-?\d+)$/);
+        if (!m) return null;
+
+        const [, name, octS] = m;
+        const octave = parseInt(octS, 10);
+        const noteVal = NOTES[name];
+
+        if (noteVal === undefined || Number.isNaN(octave)) return null;
+
+        const semitones = noteVal + (octave - 4) * 12;
+        return A4 * Math.pow(2, (semitones - 9) / 12);
     }
 
-    private createOscillator(freq: number) {
-        const osc = this.audioCtx.createOscillator();
-        const gain = this.audioCtx.createGain();
+    async playNote(note: string, durationSeconds = 1) {
+        await this.resumeIfNeeded();
+        const freq = this.noteToFreq(note);
+        if (!freq) return;
 
-        osc.frequency.value = freq;
+        const sound = this.state.sound;
 
-        // Waveform based on selected sound
-        switch (this.currentSound) {
-            case "piano":
-                osc.type = "sine";
-                break;
-            case "synth":
-                osc.type = "sawtooth";
-                break;
-            case "organ":
-                osc.type = "square";
-                break;
-        }
+        if (sound === "fm-piano") return this.playFmPianoOneShot(freq, durationSeconds);
+        if (sound === "pad") return this.playPadOneShot(freq, durationSeconds);
 
-        // Fade out to avoid clicks
-        gain.gain.setValueAtTime(1, this.audioCtx.currentTime);
-
-        osc.connect(gain).connect(this.audioCtx.destination);
-
-        return { osc, gain };
+        const type = sound === "sawtooth" ? "sawtooth" : "sine";
+        this.playOscOneShot(freq, durationSeconds, type);
     }
 
-    playChord(chord: Chord) {
-        const durationMs = (chord.durationBeats ?? 1) * this.getStepMs();
-        const durationSec = durationMs / 1000;
+    async playChord(chord: AudioChord) {
+        await this.resumeIfNeeded();
 
-        chord.notes.forEach((note) => {
-            const freq = this.noteToFreq(note);
-            if (!freq) return;
+        const beats = chord.durationBeats ?? 1;
+        const msPerBeat = 60000 / Math.max(1, this.state.bpm);
+        const seconds = Math.max(0.03, (beats * msPerBeat) / 1000);
 
-            const { osc, gain } = this.createOscillator(freq);
-
-            const stopTime = this.audioCtx.currentTime + durationSec;
-            gain.gain.linearRampToValueAtTime(0, stopTime - 0.02);
-
-            osc.start();
-            osc.stop(stopTime);
-        });
+        chord.notes.forEach((note) => this.playNote(note, seconds));
     }
 
-    playSequence(chords: Chord[], startIndex = 0) {
+    playSequence(chords: AudioChord[], startIndex = 0, loop = this.state.loop) {
         if (!chords.length) return;
+
         this.stopSequence();
 
-        let i = startIndex;
+        this.isPlayingSequence = true;
+        this.sequenceIndex = Math.max(0, Math.min(startIndex, chords.length - 1));
 
-        const scheduleNext = () => {
-            if (!chords.length) return;
-            if (i >= chords.length) {
-                if (this.loop) i = 0;
-                else return this.stopSequence();
+        this.activeSequenceLoop = loop;
+
+        const tick = () => {
+            if (!this.isPlayingSequence) return;
+
+            const current = chords[this.sequenceIndex];
+            if (!current) {
+                this.stopSequence();
+                return;
             }
 
-            const chord = chords[i];
-            this.playChord(chord);
+            this.playChord(current);
 
-            const delay = Math.max(50, (chord.durationBeats ?? 1) * this.getStepMs());
+            const beats = current.durationBeats ?? 1;
+            const msPerBeat = 60000 / Math.max(1, this.state.bpm);
+            const delay = Math.max(20, beats * msPerBeat);
 
-            i += 1;
-            this.timeoutRef = window.setTimeout(scheduleNext, delay);
+            this.sequenceIndex++;
+
+            if (this.sequenceIndex >= chords.length) {
+                if (this.activeSequenceLoop) {
+                    this.sequenceIndex = 0;
+                } else {
+                    this.stopSequence();
+                    return;
+                }
+            }
+
+            this.seqTimeout = window.setTimeout(tick, delay);
         };
 
-        scheduleNext();
+        tick();
     }
 
     stopSequence() {
-        if (this.timeoutRef != null) {
-            window.clearTimeout(this.timeoutRef);
-            this.timeoutRef = null;
+        this.isPlayingSequence = false;
+        if (this.seqTimeout != null) {
+            window.clearTimeout(this.seqTimeout);
+            this.seqTimeout = null;
         }
+    }
+
+    // -----------------------------------------------------
+    // SYNTH ENGINES
+    // -----------------------------------------------------
+
+    private playOscOneShot(freq: number, durationSeconds: number, type: OscillatorType) {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = type;
+        osc.frequency.value = freq;
+
+        gain.gain.setValueAtTime(0.0001, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.5, this.ctx.currentTime + 0.01);
+        gain.gain.exponentialRampToValueAtTime(
+            0.0001,
+            this.ctx.currentTime + Math.max(0.05, durationSeconds)
+        );
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + Math.max(0.05, durationSeconds));
+    }
+
+    private playPadOneShot(freq: number, durationSeconds: number) {
+        const o1 = this.ctx.createOscillator();
+        const o2 = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+
+        o1.type = "sine";
+        o2.type = "sine";
+        o1.frequency.value = freq;
+        o2.frequency.value = freq * 1.005;
+
+        g.gain.setValueAtTime(0.0001, this.ctx.currentTime);
+        g.gain.linearRampToValueAtTime(0.35, this.ctx.currentTime + 0.15);
+        g.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + durationSeconds);
+
+        o1.connect(g);
+        o2.connect(g);
+        g.connect(this.ctx.destination);
+
+        o1.start();
+        o2.start();
+        o1.stop(this.ctx.currentTime + durationSeconds + 0.02);
+        o2.stop(this.ctx.currentTime + durationSeconds + 0.02);
+    }
+
+    private playFmPianoOneShot(freq: number, durationSeconds: number) {
+        const carrier = this.ctx.createOscillator();
+        const mod = this.ctx.createOscillator();
+        const modGain = this.ctx.createGain();
+        const outGain = this.ctx.createGain();
+
+        carrier.type = "sine";
+        mod.type = "sine";
+        carrier.frequency.value = freq;
+        mod.frequency.value = freq * 2.0;
+        modGain.gain.value = freq * 1.2;
+
+        outGain.gain.setValueAtTime(0.0001, this.ctx.currentTime);
+        outGain.gain.linearRampToValueAtTime(0.6, this.ctx.currentTime + 0.005);
+        outGain.gain.exponentialRampToValueAtTime(
+            0.0001,
+            this.ctx.currentTime + durationSeconds
+        );
+
+        mod.connect(modGain);
+        modGain.connect(carrier.frequency);
+        carrier.connect(outGain);
+        outGain.connect(this.ctx.destination);
+
+        mod.start();
+        carrier.start();
+        mod.stop(this.ctx.currentTime + durationSeconds + 0.02);
+        carrier.stop(this.ctx.currentTime + durationSeconds + 0.02);
     }
 }

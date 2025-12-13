@@ -1,39 +1,27 @@
-type SavedChord = {
-    label: string;
-    notes: string[];
-};
+// src/ChordDisplay.tsx
+import type { AudioEngine } from "../helpers/AudioEngine";
 
 type Props = {
-    chord: SavedChord | null;
+    chord: { label: string; notes: string[] } | null;
     chordName: string;
-    activeNotes: string[];
-    playTone: (freq: number, volume?: number) => void;
-    noteToFreq: (note: string) => number | null;
+    audioEngine: AudioEngine;
 };
 
-export default function ChordDisplay({
-    chord,
-    chordName,
-    activeNotes,
-    playTone,
-    noteToFreq,
-}: Props) {
+export default function ChordDisplay({ chord, chordName, audioEngine }: Props) {
     return (
         <div
             id="chord-display"
             draggable={!!chord}
             onDragStart={(e) => {
                 if (!chord) return;
-                // Use explicit MIME type so drop targets can parse it
                 e.dataTransfer.setData("application/chord", JSON.stringify(chord));
             }}
-            onClick={() =>
-                activeNotes.forEach((n) => {
-                    const freq = noteToFreq(n);
-                    if (freq !== null) playTone(freq, 1);
-                })
-            }
-            className="mt-8 p-4 bg-green-500 text-white rounded-lg text-2xl font-bold text-center w-full max-w-[300px] shadow-lg cursor-move"
+            onClick={() => {
+                // preview chord using audio engine
+                if (!chord) return;
+                audioEngine.playChord({ notes: chord.notes, durationBeats: 1 });
+            }}
+            className="mt-4 p-4 bg-green-500 text-white rounded-lg text-2xl font-bold text-center w-full max-w-[300px] shadow-lg cursor-move"
         >
             {chordName}
         </div>

@@ -1,50 +1,154 @@
-import type { AudioEngine } from "../helpers/AudioEngine";
+// src/components/Keyboard.tsx
+import { useEffect, useRef } from "react";
 
+/* ---------- keyboard layout ---------- */
+const KEYS = [
+	"C1", "C#1", "D1", "D#1", "E1", "F1", "F#1", "G1", "G#1", "A1", "A#1", "B1",
+	"C2", "C#2", "D2", "D#2", "E2", "F2", "F#2", "G2", "G#2", "A2", "A#2", "B2",
+	"C3", "C#3", "D3", "D#3", "E3", "F3", "F#3", "G3", "G#3", "A3", "A#3", "B3",
+	"C4", "C#4", "D4", "D#4", "E4", "F4", "F#4", "G4", "G#4", "A4", "A#4", "B4",
+	"C5", "C#5", "D5", "D#5", "E5", "F5", "F#5", "G5", "G#5", "A5", "A#5", "B5",
+	"C6"
+];
+
+const BASE_KEYBOARD: Record<string, string> = {
+	a: "C", w: "C#", s: "D", e: "D#", d: "E",
+	f: "F", t: "F#", g: "G", y: "G#", h: "A", u: "A#", j: "B"
+};
+
+const EXTRA_KEYBOARD: Record<string, string> = {
+	i: "C", k: "C#", o: "D", l: "D#", p: "E"
+};
+
+const whiteKeyWidth = 48;
+const blackKeyOffsetMap: Record<string, number> = { C: 32, D: 30, F: 30, G: 30, A: 30 };
+const VISIBLE_KEYS_COUNT = 37;
+
+/* ---------- helpers ---------- */
+function getNoteFromKey(key: string, octave: number) {
+	if (BASE_KEYBOARD[key]) return BASE_KEYBOARD[key] + octave;
+	if (EXTRA_KEYBOARD[key]) return EXTRA_KEYBOARD[key] + (octave + 1);
+	return null;
+}
+
+/* ---------- props ---------- */
 type Props = {
-	visibleKeys: string[];
-	visibleWhiteKeys: string[];
-	blackKeyPositions: { note: string; leftPosition: number }[];
+	baseOctave: number;
+	setBaseOctave: (o: number) => void;
 	activeNotes: string[];
-	toggleNote: (note: string) => void;
-	whiteKeyWidth: number;
-	audioEngine: AudioEngine;
+	onNoteOn: (note: string) => void;
+	onNoteOff: (note: string) => void;
+	onNoteClick: (note: string) => void;
+	onWidthChange?: (width: number) => void;
 };
 
 export default function Keyboard({
-	visibleKeys,
-	visibleWhiteKeys,
-	blackKeyPositions,
+	baseOctave,
+	setBaseOctave,
 	activeNotes,
-	toggleNote,
-	whiteKeyWidth,
-	audioEngine,
+	onNoteOn,
+	onNoteOff,
+	onNoteClick,
+	onWidthChange
 }: Props) {
+
+	/* ---------- visible keys ---------- */
+	const startIndex = Math.min(
+		Math.max(0, KEYS.findIndex(k => parseInt(k.slice(-1)) === baseOctave)),
+		KEYS.length - VISIBLE_KEYS_COUNT
+	);
+
+	const visibleKeys = KEYS.slice(startIndex, startIndex + VISIBLE_KEYS_COUNT);
+	const visibleWhiteKeys = visibleKeys.filter(k => !k.includes("#"));
+
+	const blackKeys = visibleKeys
+		.filter(k => k.includes("#"))
+		.map(key => {
+			const pred = KEYS[KEYS.indexOf(key) - 1];
+			const idx = visibleWhiteKeys.indexOf(pred);
+			const offset = blackKeyOffsetMap[pred?.[0]];
+			return idx >= 0 && offset !== undefined
+				? { note: key, left: idx * whiteKeyWidth + offset }
+				: null;
+		})
+		.filter(Boolean) as { note: string; left: number }[];
+
+	/* ---------- computer keyboard ---------- */
+	useEffect(() => {
+		const down = (e: KeyboardEvent) => {
+			if (e.key === "z") return setBaseOctave(Math.max(1, baseOctave - 1));
+			if (e.key === "x") return setBaseOctave(Math.min(4, baseOctave + 1));
+			const note = getNoteFromKey(e.key.toLowerCase(), baseOctave);
+			if (note) onNoteOn(note);
+		};
+		const up = (e: KeyboardEvent) => {
+			const note = getNoteFromKey(e.key.toLowerCase(), baseOctave);
+			if (note) onNoteOff(note);
+		};
+		window.addEventListener("keydown", down);
+		window.addEventListener("keyup", up);
+		return () => {
+			window.removeEventListener("keydown", down);
+			window.removeEventListener("keyup", up);
+		};
+	}, [baseOctave]);
+
+	/* ---------- width observer ---------- */
+	const rootRef = useRef<HTMLDivElement | null>(null);
+
+	useEffect(() => {
+		if (!rootRef.current || !onWidthChange) return;
+
+		const update = () => {
+			onWidthChange(rootRef.current!.offsetWidth);
+		};
+
+		update();
+
+		const ro = new ResizeObserver(update);
+		ro.observe(rootRef.current);
+
+		return () => ro.disconnect();
+	}, [onWidthChange]);
+	
+	/* ---------- render ---------- */
 	return (
-		<div id="keyboard-wrapper" className="p-4 bg-gray-800 rounded-xl shadow-lg">
+		<div ref={rootRef} id="keyboard-wrapper" className="p-4 bg-gray-800 rounded-xl shadow-lg">
 			<div
 				className="relative mx-auto"
-				style={{ width: `${visibleWhiteKeys.length * whiteKeyWidth}px`, height: "200px" }}
+				style={{ width: visibleWhiteKeys.length * whiteKeyWidth, height: 200 }}
 			>
 				<div className="flex">
-					{visibleWhiteKeys.map((note) => (
+					{visibleWhiteKeys.map(note => (
 						<div
 							key={note}
-							onClick={() => toggleNote(note)}
-							className={`w-[48px] h-[192px] border border-gray-300 rounded-b-lg relative z-0 cursor-pointer transition shadow-md ${activeNotes.includes(note) ? "bg-blue-400" : "bg-white"}`}
+							onMouseDown={() => onNoteClick(note)}
+							className={`
+								h-[192px] border border-gray-300 rounded-b-lg
+								relative z-0 cursor-pointer transition shadow-md
+								box-border
+								${activeNotes.includes(note) ? "bg-blue-400" : "bg-white"}
+							`}
+							style={{ width: `${whiteKeyWidth}px` }}
 						/>
 					))}
 				</div>
 
-				{blackKeyPositions.map(({ note, leftPosition }) => (
+				{blackKeys.map(({ note, left }) => (
 					<div
 						key={note}
-						onClick={() => toggleNote(note)}
-						className={`w-[32px] h-[128px] absolute top-0 z-10 rounded-b-md cursor-pointer transition shadow-2xl ${activeNotes.includes(note) ? "bg-blue-800" : "bg-black"}`}
-						style={{ left: `${leftPosition}px`, top: 0 }}
+						onMouseDown={() => onNoteClick(note)}
+						className={`
+							absolute top-0 z-10 h-[128px]
+							rounded-b-md cursor-pointer transition shadow-2xl
+							box-border
+							${activeNotes.includes(note) ? "bg-blue-800" : "bg-black"}
+							`}
+						style={{ width: "32px", left }}
+
 					/>
 				))}
 			</div>
-
 			<div className="mt-4 w-full flex items-center justify-between">
 				<div className="p-2 bg-gray-700 text-white rounded text-center w-full sm:w-[48%]">
 					Octaves: {visibleKeys[0]?.slice(-1)} – {visibleKeys[visibleKeys.length - 1]?.slice(-1)}

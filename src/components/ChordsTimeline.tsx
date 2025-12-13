@@ -1,5 +1,5 @@
 // src/ChordTimeline.tsx
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
 	DragDropContext,
 	Droppable,
@@ -7,12 +7,14 @@ import {
 	type DropResult,
 	type DragStart,
 } from "@hello-pangea/dnd";
+
 import type { AudioEngine, SoundType } from "../helpers/AudioEngine";
 import SoundSelector from "./SoundSelector";
 import TimelineControls from "./TimelineControls";
 import TransportButtons from "./TransportButtons";
 
-type SavedChord = {
+/* ---------- types ---------- */
+export type SavedChord = {
 	label: string;
 	notes: string[];
 	id?: string;
@@ -22,121 +24,160 @@ type SavedChord = {
 
 type Props = {
 	timeline: SavedChord[];
-	setTimeline: (updater: SavedChord[] | ((p: SavedChord[]) => SavedChord[])) => void;
-	noteToFreq: (note?: string) => number | null; // kept for compatibility
-	width: string;
+	setTimeline: (
+		updater: SavedChord[] | ((p: SavedChord[]) => SavedChord[])
+	) => void;
+
+	width: number;
 	audioEngine: AudioEngine;
+
 	playSequence: () => void;
 	onPreviewChord: (chord: SavedChord) => void;
+
 	loop: boolean;
 	setLoop: (v: boolean) => void;
+
 	playheadIndex: number | null;
 };
 
-export default function ChordTimeline({ 
-		timeline, setTimeline, width, audioEngine, playSequence, onPreviewChord, loop, setLoop, playheadIndex
-	}: Props) {
-	const [playingIndex, _setPlayingIndex] = useState<number | null>(null);
+/* ---------- component ---------- */
+export default function ChordTimeline({
+	timeline,
+	setTimeline,
+	width,
+	audioEngine,
+	playSequence,
+	onPreviewChord,
+	loop,
+	setLoop,
+	playheadIndex,
+}: Props) {
+
+	/* ---------- local state ---------- */
 	const [bpm, setBpm] = useState(128);
+	const [sound, setSound] = useState<SoundType>("sine");
+
 	const containerRef = useRef<HTMLDivElement | null>(null);
 	const altKeyRef = useRef(false);
 
-	// sound selection (keeps engine and timeline consistent)
-	const [sound, setSound] = useState<SoundType>("sine");
+	/* ---------- engine sync ---------- */
 	useEffect(() => {
 		audioEngine.setSound(sound);
-	}, [sound]);
-
+	}, [sound, audioEngine]);
 
 	useEffect(() => {
-		if (audioEngine) audioEngine.setBpm(bpm);
+		audioEngine.setBpm(bpm);
 	}, [bpm, audioEngine]);
 
+	/* ---------- alt-key tracking ---------- */
 	useEffect(() => {
-		const kd = (e: KeyboardEvent) => { altKeyRef.current = e.altKey; };
-		const ku = (e: KeyboardEvent) => { altKeyRef.current = e.altKey; };
-		window.addEventListener("keydown", kd);
-		window.addEventListener("keyup", ku);
+		const onKey = (e: KeyboardEvent) => {
+			altKeyRef.current = e.altKey;
+		};
+		window.addEventListener("keydown", onKey);
+		window.addEventListener("keyup", onKey);
 		return () => {
-			window.removeEventListener("keydown", kd);
-			window.removeEventListener("keyup", ku);
+			window.removeEventListener("keydown", onKey);
+			window.removeEventListener("keyup", onKey);
 		};
 	}, []);
 
+	/* ---------- drag & drop ---------- */
+	const onDragStart = (_: DragStart) => { };
 
-	const onDragStart = (_start: DragStart) => { };
 	const onDragEnd = (result: DropResult) => {
 		if (!result.destination) return;
+
 		const src = result.source.index;
 		const dst = result.destination.index;
-		const copied = [...timeline];
-		const [moved] = copied.splice(src, 1);
-		if (altKeyRef.current) copied.splice(dst, 0, { ...moved, id: crypto.randomUUID() });
-		else copied.splice(dst, 0, moved);
-		setTimeline(copied);
+
+		setTimeline(prev => {
+			const copy = [...prev];
+			const [moved] = copy.splice(src, 1);
+			copy.splice(
+				dst,
+				0,
+				altKeyRef.current ? { ...moved, id: crypto.randomUUID() } : moved
+			);
+			return copy;
+		});
+
 		altKeyRef.current = false;
 	};
 
-	const deleteChord = (index: number) => setTimeline(prev => prev.filter((_, i) => i !== index));
+	const deleteChord = (index: number) =>
+		setTimeline(prev => prev.filter((_, i) => i !== index));
 
-	// native drops (from chord-display / saved-chords)
+	/* ---------- native drops ---------- */
 	const computeInsertIndexFromClientX = (clientX: number) => {
 		const container = containerRef.current;
 		if (!container) return timeline.length;
-		const children = Array.from(container.querySelectorAll("[data-tl-item]")) as HTMLElement[];
-		if (!children.length) return 0;
-		for (let i = 0; i < children.length; i++) {
-			const rect = children[i].getBoundingClientRect();
-			const midpoint = rect.left + rect.width / 2;
-			if (clientX < midpoint) return i;
+
+		const items = Array.from(
+			container.querySelectorAll("[data-tl-item]")
+		) as HTMLElement[];
+
+		for (let i = 0; i < items.length; i++) {
+			const rect = items[i].getBoundingClientRect();
+			if (clientX < rect.left + rect.width / 2) return i;
 		}
-		return children.length;
+		return items.length;
 	};
 
 	const handleNativeDrop = (e: React.DragEvent) => {
 		e.preventDefault();
 		if (e.dataTransfer.getData("internal-timeline")) return;
-		const data = e.dataTransfer.getData("application/chord") || e.dataTransfer.getData("application/json") || e.dataTransfer.getData("text/plain");
-		if (!data) return;
+
+		const raw =
+			e.dataTransfer.getData("application/chord") ||
+			e.dataTransfer.getData("application/json") ||
+			e.dataTransfer.getData("text/plain");
+
+		if (!raw) return;
+
 		try {
-			const chord = JSON.parse(data);
+			const chord = JSON.parse(raw);
 			if (!chord?.label || !Array.isArray(chord.notes)) return;
-			const idx = computeInsertIndexFromClientX(e.clientX);
-			const isDuplicate = e.altKey;
-			const newItem: SavedChord = { ...chord, id: crypto.randomUUID(), duration: chord.duration ?? 1, color: chord.color ?? "#666666" };
+
+			const index = computeInsertIndexFromClientX(e.clientX);
+
+			const newChord: SavedChord = {
+				...chord,
+				id: crypto.randomUUID(),
+				duration: chord.duration ?? 1,
+				color: chord.color ?? "#4b5563",
+			};
+
 			setTimeline(prev => {
 				const copy = [...prev];
-				if (!isDuplicate) {
-					const existingIndex = prev.findIndex(c => c.id === chord.id);
-					if (existingIndex >= 0) copy.splice(existingIndex, 1);
-				}
-				copy.splice(idx, 0, newItem);
+				copy.splice(index, 0, newChord);
 				return copy;
 			});
 		} catch { }
 	};
 
-	const handleNativeDragOver = (e: React.DragEvent) => e.preventDefault();
-
+	/* ---------- ensure IDs ---------- */
 	useEffect(() => {
-		const missing = timeline.some(c => !c.id);
-		if (missing) setTimeline(prev => prev.map(c => (c.id ? c : { ...c, id: crypto.randomUUID() })));
+		if (timeline.some(c => !c.id)) {
+			setTimeline(prev =>
+				prev.map(c => (c.id ? c : { ...c, id: crypto.randomUUID() }))
+			);
+		}
 	}, [timeline, setTimeline]);
 
+	/* ---------- render ---------- */
 	return (
 		<div className="mt-8 mx-auto flex flex-col gap-3" style={{ width }}>
-			<div className="flex items-center w-full gap-4">
+			<div className="flex items-center gap-4">
 
 				<TransportButtons
-					playingIndex={playingIndex}
-					timelineLength={timeline.length}
+					playheadIndex={playheadIndex}
+					timelineLength={width}
 					playSequence={playSequence}
 					audioEngine={audioEngine}
 				/>
 
-				<div className="ml-4">
-					<SoundSelector sound={sound} setSound={setSound} />
-				</div>
+				<SoundSelector sound={sound} setSound={setSound} />
 
 				<TimelineControls
 					bpm={bpm}
@@ -147,17 +188,16 @@ export default function ChordTimeline({
 			</div>
 
 			<div
-				id="timeline"
 				className="rounded-lg p-3 bg-gray-900 border border-gray-700"
 				onDrop={handleNativeDrop}
-				onDragOver={handleNativeDragOver}
+				onDragOver={e => e.preventDefault()}
 			>
 				<div className="overflow-x-auto">
 					<DragDropContext onDragStart={onDragStart} onDragEnd={onDragEnd}>
 						<Droppable droppableId="timeline" direction="horizontal">
-							{(provided) => (
+							{provided => (
 								<div
-									ref={(node) => {
+									ref={node => {
 										provided.innerRef(node);
 										containerRef.current = node;
 									}}
@@ -165,60 +205,54 @@ export default function ChordTimeline({
 									className="flex gap-3 items-center min-h-[90px] py-2"
 								>
 									{timeline.length === 0 && (
-										<div className="text-gray-500 text-sm italic opacity-70 mx-auto py-6 select-none pointer-events-none">
+										<div className="text-gray-500 italic mx-auto">
 											Drop your chords here…
 										</div>
 									)}
 
 									{timeline.map((chord, index) => {
-										const id = chord.id ?? index.toString();
-										const bg = chord.color ?? "#4b5563";
 										const isPlaying = playheadIndex === index;
 
 										return (
-											<Draggable key={id} draggableId={id} index={index}>
-												{(drag, snapshot) => (
+											<Draggable
+												key={chord.id!}
+												draggableId={chord.id!}
+												index={index}
+											>
+												{drag => (
 													<div
 														ref={drag.innerRef}
 														{...drag.draggableProps}
 														{...drag.dragHandleProps}
 														data-tl-item
 														className={`
-															relative px-6 py-6 w-[120px] text-center rounded-xl cursor-pointer text-white select-none 
-															transition-transform ${snapshot.isDragging ? "ring-2 ring-blue-400" : ""}
-															${isPlaying ? "ring-1 ring-white-400 scale-105" : ""}
+															relative px-6 py-6 w-[120px] rounded-xl cursor-pointer
+															text-white select-none
+															${isPlaying ? "ring-2 ring-white scale-105" : ""}
 														`}
 														style={{
-															backgroundColor: bg,
-															marginLeft: 5,
+															backgroundColor: chord.color ?? "#4b5563",
 															...drag.draggableProps.style,
 														}}
-														onMouseDown={(e) => e.preventDefault()} // prevent unwanted focus/selection
-														onClick={() => {
-															if (!audioEngine) return;
-
-															// Stop any running sequence
-															audioEngine.stopSequence();
-
-															// Play this chord ONCE
-															audioEngine.playChord({
-																notes: chord.notes,
-																durationBeats: chord.duration ?? 1,
-															});
-
-															// Notify parent (KordApp) to update keyboard + display
+														// onMouseDown={e => e.preventDefault()}
+														onMouseDown={() => {
 															onPreviewChord(chord);
-														}}													>
+														}}
+
+													>
 														<button
-															className="absolute -top-1 -right-1 bg-red-600 hover:bg-red-500 rounded-full w-6 h-6 flex items-center justify-center text-xs shadow"
-															onClick={(ev) => {
-																ev.stopPropagation();
+															className="absolute -top-1 -right-1 bg-red-600 rounded-full w-6 h-6 text-xs"
+															onClick={e => {
+																e.stopPropagation();
 																deleteChord(index);
 															}}
 														>
 															✕
 														</button>
-														<div className="font-semibold">{chord.label}</div>
+
+														<div className="font-semibold">
+															{chord.label}
+														</div>
 													</div>
 												)}
 											</Draggable>

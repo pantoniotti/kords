@@ -4,14 +4,14 @@ import RippleButton from "./RippleButton";
 import { SkipBack, Play, Square, SkipForward } from "lucide-react";
 
 type Props = {
-    playingIndex: number | null;
+    playheadIndex: number | null;
     timelineLength: number;
     playSequence: (start?: number) => void;
     audioEngine: AudioEngine;
 };
 
 export default function TransportButtons({
-    playingIndex,
+    playheadIndex,
     timelineLength,
     playSequence,
     audioEngine,
@@ -23,8 +23,8 @@ export default function TransportButtons({
                 onClick={() => {
                     audioEngine.stopSequence();
                     playSequence(
-                        playingIndex != null
-                            ? Math.max(playingIndex - 1, 0)
+                        playheadIndex != null
+                            ? Math.max(playheadIndex - 1, 0)
                             : 0
                     );
                 }}
@@ -36,7 +36,7 @@ export default function TransportButtons({
                 className="bg-green-500 hover:bg-green-400 rounded-xl"
                 onClick={() => {
                     audioEngine.stopSequence();
-                    playSequence(playingIndex ?? 0);
+                    playSequence(playheadIndex ?? 0);
                 }}
             >
                 <Play size={20} />
@@ -54,9 +54,9 @@ export default function TransportButtons({
                 onClick={() => {
                     audioEngine.stopSequence();
                     playSequence(
-                        playingIndex == null
+                        playheadIndex == null
                             ? 0
-                            : Math.min(playingIndex + 1, timelineLength - 1)
+                            : Math.min(playheadIndex + 1, timelineLength - 1)
                     );
                 }}
             >

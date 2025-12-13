@@ -1,5 +1,5 @@
 // src/helpers/AudioEngine.ts
-export type SoundType = "sine" | "square" | "triangle" | "sawtooth";
+export type SoundType = "sawtooth" | "sine" | "triangle" | "square";
 
 type Chord = {
     notes: string[];
@@ -14,7 +14,7 @@ export class AudioEngine {
     private activeOscillators: Map<string, OscillatorNode> = new Map();
     private sequenceTimeouts: number[] = [];
 
-    constructor(bpm = 120, sound: SoundType = "sine") {
+    constructor(bpm = 120, sound: SoundType = "sawtooth") {
         this.context = new AudioContext({ latencyHint: "interactive" });
         
         this.bpm = bpm;
@@ -66,7 +66,7 @@ export class AudioEngine {
     playChord(chord: Chord) {
         this.resumeContext();
         if (this.context.state !== "running") return; // wait for user gesture
-        this.stopAllNotes();
+        // this.stopAllNotes();
         const seconds = (60 / this.bpm) * chord.durationBeats;
         chord.notes.forEach(n => this.playNote(n, seconds));
     }
@@ -84,8 +84,6 @@ export class AudioEngine {
                 if (loop) schedule(0);
                 return;
             }
-
-            this.stopAllNotes(); // 🔑 prevents renderer crash
 
             const chord = chords[index];
 

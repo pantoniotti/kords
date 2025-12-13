@@ -16,8 +16,10 @@ export default function SoundSelector({ sound, setSound }: Props) {
                     onChange={(e) => setSound(e.target.value as SoundType)}
                     className="px-2 rounded bg-gray-800 text-white border border-gray-600"
                 >
-                    <option value="sine">Sine</option>
                     <option value="sawtooth">Sawtooth</option>
+                    <option value="sine">Sine</option>
+                    <option value="triangle">Triangle</option>
+                    <option value="square">Square</option>
                     <option value="fm-piano">FM Piano</option>
                     <option value="pad">Pad</option>
                 </select>

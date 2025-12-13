@@ -1,43 +1,38 @@
 name: Deploy to GitHub Pages
 
-# Trigger deployment on push to main (or your default branch)
 on:
   push:
     branches:
-      - main
-
+      - main   # change to 'master' if your default branch is master
+      
   workflow_dispatch: 
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-
     steps:
-      # Step 1: Checkout the repository
+      # 1️⃣ Checkout the repo
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # Step 2: Setup Node.js
+      # 2️⃣ Set up Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: 20
+          node-version: 18
 
-      # Step 3: Install dependencies
+      # 3️⃣ Install dependencies
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
-      # Step 4: Build Vite project
-      - name: Build project
+      # 4️⃣ Build the project
+      - name: Build
         run: npm run build
 
-      # Step 5: Deploy to GitHub Pages
+      # 5️⃣ Deploy to gh-pages
       - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
+        uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist
-          # Optional: set a custom branch, default is gh-pages
           publish_branch: gh-pages
-          # Optional: keep commit history
-          keep_files: false

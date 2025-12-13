@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <title>Redirecting...</title>
+  <script type="text/javascript">
+    // Redirect all 404s to index.html for SPA
+    const path = window.location.pathname;
+    window.location.href = '/kords/' + path.substring(1);
+  </script>
+</head>
+
+<body>
+  <p>Redirecting...</p>
+</body>
+
+</html>

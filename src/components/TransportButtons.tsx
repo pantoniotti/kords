@@ -1,6 +1,6 @@
 // src/components/TransportButtons.tsx
 import type { AudioEngine } from "../helpers/AudioEngine";
-import RippleButton from "./RippleButton";
+import RippleButton from "../atoms/RippleButton";
 import { SkipBack, Play, Square, SkipForward } from "lucide-react";
 
 type Props = {
@@ -8,6 +8,7 @@ type Props = {
     timelineLength: number;
     playSequence: (start?: number) => void;
     audioEngine: AudioEngine;
+    setPlayheadIndex: any;
 };
 
 export default function TransportButtons({
@@ -15,6 +16,7 @@ export default function TransportButtons({
     timelineLength,
     playSequence,
     audioEngine,
+    setPlayheadIndex
 }: Props) {
     return (
         <div className="flex items-center gap-3">
@@ -44,7 +46,11 @@ export default function TransportButtons({
 
             <RippleButton
                 className="bg-red-600 hover:bg-red-500 rounded-xl"
-                onClick={audioEngine.stopSequence.bind(audioEngine)}
+                onClick={() => {
+                        audioEngine.stopSequence.bind(audioEngine)
+                        setPlayheadIndex(null);
+                    }
+                }
             >
                 <Square size={20} />
             </RippleButton>
@@ -63,14 +69,15 @@ export default function TransportButtons({
                 <SkipForward size={20} />
             </RippleButton>
 
-            <button
+            <RippleButton
                 onClick={() => {
                     audioEngine.panic();
+                    setPlayheadIndex(null);
                 }}
                 className="px-3 py-1 bg-red-700 hover:bg-red-600 rounded text-white font-bold"
             >
-                STOP
-            </button>
+                PANIC
+            </RippleButton>
         </div>
     );
 }

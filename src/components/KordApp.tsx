@@ -196,6 +196,7 @@ export default function KordApp() {
 				loop={loop}
 				setLoop={setLoop}
 				playheadIndex={playheadIndex}
+				setPlayheadIndex={setPlayheadIndex}
 			/>
 
 			<div className="mt-4">

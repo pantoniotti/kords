@@ -38,6 +38,7 @@ type Props = {
 	setLoop: (v: boolean) => void;
 
 	playheadIndex: number | null;
+	setPlayheadIndex: any
 };
 
 /* ---------- component ---------- */
@@ -51,6 +52,7 @@ export default function ChordTimeline({
 	loop,
 	setLoop,
 	playheadIndex,
+	setPlayheadIndex
 }: Props) {
 
 	/* ---------- local state ---------- */
@@ -175,6 +177,7 @@ export default function ChordTimeline({
 					timelineLength={width}
 					playSequence={playSequence}
 					audioEngine={audioEngine}
+					setPlayheadIndex={setPlayheadIndex}
 				/>
 
 				<SoundSelector sound={sound} setSound={setSound} />
@@ -188,7 +191,7 @@ export default function ChordTimeline({
 			</div>
 
 			<div
-				className="rounded-lg p-3 bg-gray-900 border border-gray-700"
+				className="rounded-lg p-5 bg-gray-900 border border-gray-700"
 				onDrop={handleNativeDrop}
 				onDragOver={e => e.preventDefault()}
 			>
@@ -233,9 +236,15 @@ export default function ChordTimeline({
 														style={{
 															backgroundColor: chord.color ?? "#4b5563",
 															...drag.draggableProps.style,
+															marginLeft: index === 0 ? 12 : 0,
 														}}
-														// onMouseDown={e => e.preventDefault()}
-														onMouseDown={() => {
+														onMouseDown={e => {
+															e.preventDefault();
+															// Stop any running sequence
+															audioEngine.stopSequence();
+															// Mark this chord as selected
+															setPlayheadIndex(index);
+															// Play it + update keyboard / display
 															onPreviewChord(chord);
 														}}
 

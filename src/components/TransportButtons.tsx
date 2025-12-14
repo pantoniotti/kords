@@ -20,6 +20,7 @@ export default function TransportButtons({
 }: Props) {
     return (
         <div className="flex items-center gap-3">
+            {/* rewind button */}
             <RippleButton
                 className="bg-gray-700 hover:bg-gray-600 rounded-xl"
                 onClick={() => {
@@ -34,6 +35,7 @@ export default function TransportButtons({
                 <SkipBack size={20} />
             </RippleButton>
 
+            {/* play button */}
             <RippleButton
                 className="bg-green-500 hover:bg-green-400 rounded-xl"
                 onClick={() => {
@@ -44,10 +46,11 @@ export default function TransportButtons({
                 <Play size={20} />
             </RippleButton>
 
+            {/* stop button */}
             <RippleButton
                 className="bg-red-600 hover:bg-red-500 rounded-xl"
                 onClick={() => {
-                        audioEngine.stopSequence.bind(audioEngine)
+                        audioEngine.stopSequence()
                         setPlayheadIndex(null);
                     }
                 }
@@ -55,6 +58,7 @@ export default function TransportButtons({
                 <Square size={20} />
             </RippleButton>
 
+            {/* forward button */}
             <RippleButton
                 className="bg-gray-700 hover:bg-gray-600 rounded-xl"
                 onClick={() => {
@@ -69,6 +73,7 @@ export default function TransportButtons({
                 <SkipForward size={20} />
             </RippleButton>
 
+            {/* panic button */}
             <RippleButton
                 onClick={() => {
                     audioEngine.panic();

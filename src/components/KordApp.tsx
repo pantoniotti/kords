@@ -9,8 +9,7 @@ import ChordTimeline from "./ChordsTimeline";
 import ChordImportExport from "./ChordImportExport";
 import ChordDisplay from "./ChordDisplay";
 
-/* ---------- constants ---------- */
-const CHORD_THRESHOLD = 50;
+const BEATS_PER_BAR = 4;
 
 function sortNotesByPitch(notes: string[]) {
 	return [...notes].sort((a, b) => {
@@ -23,23 +22,22 @@ function sortNotesByPitch(notes: string[]) {
 
 export default function KordApp() {
 	/* ---------- state ---------- */
-	const [activeNotes, setActiveNotes] = useState<string[]>([]);
+	const [currentChordNotes, setCurrentChordNotes] = useState<string[]>([]);
 	const [chordName, setChordName] = useState("—");
-	const [baseOctave, setBaseOctave] = useState(3);
+
+	const [baseOctave, setBaseOctave] = useState(4);
 	const [savedChords, setSavedChords] = useState<any[]>([]);
 	const [loop, setLoop] = useState(false);
 	const [playheadIndex, setPlayheadIndex] = useState<number | null>(null);
 	const [keyboardWidth, setKeyboardWidth] = useState<number>(0);
 
-
 	/* ---------- refs ---------- */
-	const audioEngineRef = useRef(new AudioEngine(120, "sine"));
-	const pressedNotes = useRef<Set<string>>(new Set());
-	const chordTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const audioEngine = useRef(new AudioEngine(120, "sine"));
+	const keyboardNotes = useRef<Set<string>>(new Set());
 
-	/* ---------- AudioContext resume (required) ---------- */
+	/* ---------- resume audio ---------- */
 	useEffect(() => {
-		const resume = () => audioEngineRef.current.resumeContext();
+		const resume = () => audioEngine.current.resumeContext();
 		window.addEventListener("mousedown", resume, { once: true });
 		window.addEventListener("keydown", resume, { once: true });
 		window.addEventListener("touchstart", resume, { once: true });
@@ -50,119 +48,91 @@ export default function KordApp() {
 		};
 	}, []);
 
-	/* ---------- chord detection ---------- */
-	useEffect(() => {
-		if (!activeNotes.length) {
-			setChordName("—");
-			return;
-		}
-
-		const notes = sortNotesByPitch(activeNotes);
-		const matches = detectChord(notes);
-
-		if (matches.length) {
-			// 🔥 chord takes ownership
-			resetManualNotes();
-
-			audioEngineRef.current.playChord({
-				notes,
-				durationBeats: 1,
-			});
-		}
-
-		setChordName(matches.length ? matches[0] : "—");
-	}, [activeNotes]);
-
-
-	/* ---------- unified NOTE ON ---------- */
+	/* ---------- KEYBOARD NOTE ON ---------- */
 	const handleNoteOn = (note: string) => {
-		if (pressedNotes.current.has(note)) return;
-		pressedNotes.current.add(note);
+		keyboardNotes.current.add(note);
 
-		if (chordTimer.current) clearTimeout(chordTimer.current);
-		chordTimer.current = setTimeout(() => {
-			const notes = Array.from(pressedNotes.current);
-			setActiveNotes(sortNotesByPitch(notes));
-			notes.forEach(n => audioEngineRef.current.playNote(n, 60));
-		}, CHORD_THRESHOLD);
+		const chord = sortNotesByPitch(Array.from(keyboardNotes.current));
+
+		// 🔒 COMMIT chord
+		setCurrentChordNotes(chord);
+
+		const matches = detectChord(chord);
+		setChordName(matches.length ? matches[0] : "—");
+
+		audioEngine.current.playChord({ notes: chord });
 	};
 
-	/* ---------- unified NOTE OFF ---------- */
+
+	/* ---------- KEYBOARD NOTE OFF ---------- */
 	const handleNoteOff = (note: string) => {
-		pressedNotes.current.delete(note);
-		audioEngineRef.current.stopNote(note);
+		keyboardNotes.current.delete(note);
+		audioEngine.current.stopNote(note);
 	};
 
-
-	/* ---------- play single note (mouse click) ---------- */
+	/* ---------- MOUSE CLICK NOTE ---------- */
 	const playNoteOnce = (note: string) => {
-		setActiveNotes(prev => {
-			const exists = prev.includes(note);
+		let next: string[];
 
-			let next: string[];
-			if (exists) {
-				pressedNotes.current.delete(note);
-				audioEngineRef.current.stopNote(note);
-				next = prev.filter(n => n !== note);
-			} else {
-				pressedNotes.current.add(note);
-				audioEngineRef.current.playNote(note, 0.5);
-				next = [...prev, note];
-			}
+		if (currentChordNotes.includes(note)) {
+			next = currentChordNotes.filter(n => n !== note);
+		} else {
+			next = [...currentChordNotes, note];
+			audioEngine.current.playNote(note, 0.5);
+		}
 
-			return sortNotesByPitch(next);
-		});
+		next = sortNotesByPitch(next);
+
+		setCurrentChordNotes(next);
+
+		const matches = detectChord(next);
+		setChordName(matches.length ? matches[0] : "—");
 	};
 
-	/* ---------- reset manual notes ---------- */
-	const resetManualNotes = () => {
-		pressedNotes.current.forEach(n =>
-			audioEngineRef.current.stopNote(n)
-		);
-		pressedNotes.current.clear();
-	};
-
-	/* ---------- sequence playback ---------- */
+	/* ---------- SEQUENCE ---------- */
 	const handleSequencePlay = (startIndex = 0) => {
 		if (!savedChords.length) return;
 
-		resetManualNotes();
-
-		audioEngineRef.current.playSequence(
+		audioEngine.current.playSequence(
 			savedChords.map(c => ({
 				notes: c.notes,
-				durationBeats: c.duration ?? 1,
+				durationBeats: (c.duration ?? 1) * BEATS_PER_BAR,
 			})),
 			startIndex,
 			loop,
 			(chord, index) => {
+				const notes = sortNotesByPitch(chord.notes);
+
 				setPlayheadIndex(index);
-				setActiveNotes(sortNotesByPitch(chord.notes));
-				const matches = detectChord(chord.notes);
+
+				// 🔒 COMMIT chord
+				setCurrentChordNotes(notes);
+
+				const matches = detectChord(notes);
 				setChordName(matches.length ? matches[0] : "—");
 			}
 		);
 	};
 
-	/* ---------- timeline preview ---------- */
+	/* ---------- TIMELINE PREVIEW ---------- */
 	const handlePreviewChord = (chord: { notes: string[]; duration?: number }) => {
-		resetManualNotes();
+		const notes = sortNotesByPitch(chord.notes);
 
-		audioEngineRef.current.stopSequence();
-		setActiveNotes(sortNotesByPitch(chord.notes));
-		
-		const matches = detectChord(chord.notes);
+		// 🔒 COMMIT chord
+		setCurrentChordNotes(notes);
+
+		const matches = detectChord(notes);
 		setChordName(matches.length ? matches[0] : "—");
 
-		audioEngineRef.current.playChord({
-			notes: chord.notes,
+		audioEngine.current.playChord({
+			notes,
 			durationBeats: chord.duration ?? 1,
 		});
 	};
 
 	const currentChord =
-		activeNotes.length && chordName !== "—"
-			? { label: chordName, notes: activeNotes }
+		currentChordNotes.length && chordName !== "—"
+			? { label: chordName, notes: currentChordNotes }
 			: null;
 
 	/* ---------- render ---------- */
@@ -173,7 +143,7 @@ export default function KordApp() {
 			<Keyboard
 				baseOctave={baseOctave}
 				setBaseOctave={setBaseOctave}
-				activeNotes={activeNotes}
+				activeNotes={currentChordNotes}
 				onNoteOn={handleNoteOn}
 				onNoteOff={handleNoteOff}
 				onNoteClick={playNoteOnce}
@@ -183,14 +153,14 @@ export default function KordApp() {
 			<ChordDisplay
 				chord={currentChord}
 				chordName={chordName}
-				audioEngine={audioEngineRef.current}
+				audioEngine={audioEngine.current}
 			/>
 
 			<ChordTimeline
 				timeline={savedChords}
 				setTimeline={setSavedChords}
 				width={keyboardWidth}
-				audioEngine={audioEngineRef.current}
+				audioEngine={audioEngine.current}
 				playSequence={handleSequencePlay}
 				onPreviewChord={handlePreviewChord}
 				loop={loop}

@@ -230,7 +230,7 @@ export default function ChordTimeline({
 														data-tl-item
 														className={`
 															relative px-6 py-6 w-[120px] rounded-xl cursor-pointer
-															text-white select-none
+															text-white select-none align-center flex items-center justify-center
 															${isPlaying ? "ring-2 ring-white scale-105" : ""}
 														`}
 														style={{

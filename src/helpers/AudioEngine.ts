@@ -1,33 +1,36 @@
 // src/helpers/AudioEngine.ts
 export type SoundType = "sawtooth" | "sine" | "triangle" | "square";
 
-type Chord = {
-    notes: string[];
-    durationBeats: number;
+type ActiveVoice = {
+    osc: OscillatorNode;
+    gain: GainNode;
 };
 
 export class AudioEngine {
     private context: AudioContext;
     private bpm: number;
     private sound: SoundType;
-    private gainNode: GainNode;
-    private activeOscillators: Map<string, OscillatorNode> = new Map();
+
+    private activeVoices: Map<string, ActiveVoice> = new Map();
     private sequenceTimeouts: number[] = [];
 
     constructor(bpm = 120, sound: SoundType = "sawtooth") {
         this.context = new AudioContext({ latencyHint: "interactive" });
-        
         this.bpm = bpm;
         this.sound = sound;
-        this.gainNode = this.context.createGain();
-        this.gainNode.gain.value = 0.3;
-        this.gainNode.connect(this.context.destination);
     }
 
+    /* ---------- config ---------- */
     setBpm(bpm: number) { this.bpm = bpm; }
     setSound(sound: SoundType) { this.sound = sound; }
 
-    private noteToFreq(note: string): number {
+    resumeContext() {
+        if (this.context.state === "suspended") {
+            this.context.resume().catch(console.error);
+        }
+    }
+
+    private noteToFreq(note: string) {
         const NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
         const match = note.match(/^([A-G]#?)(\d)$/);
         if (!match) return 440;
@@ -38,100 +41,134 @@ export class AudioEngine {
         return 440 * Math.pow(2, (midi - 69) / 12);
     }
 
-    playNote(note: string, durationSec: number) {
-        this.resumeContext(); // 🔑 ensure context is running
+    private beatsToSeconds(beats: number) {
+        return (60 / this.bpm) * beats;
+    }
+
+    /* ---------- keyboard / manual notes ---------- */
+    playNote(note: string, durationSec?: number) {
+        this.resumeContext();
 
         this.stopNote(note);
+
         const osc = this.context.createOscillator();
+        const gain = this.context.createGain();
+        const now = this.context.currentTime;
+
         osc.type = this.sound;
         osc.frequency.value = this.noteToFreq(note);
-        osc.connect(this.gainNode);
-        osc.start();
-        this.activeOscillators.set(note, osc);
-        if (durationSec > 0) {
-            const id = window.setTimeout(() => this.stopNote(note), durationSec * 1000);
-            this.sequenceTimeouts.push(id);
+        osc.connect(gain);
+        gain.connect(this.context.destination);
+
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.8, now + 0.01);
+
+        osc.start(now);
+
+        if (durationSec != null && durationSec > 0) {
+            const stopTime = now + durationSec;
+            gain.gain.setTargetAtTime(0, stopTime, 0.05);
+            osc.stop(stopTime + 0.1);
+        } else {
+            // sustained note
+            this.activeVoices.set(note, { osc, gain });
         }
     }
 
-    stopNote(note: string) {
-        const osc = this.activeOscillators.get(note);
-        if (osc) {
-            try { osc.stop(); } catch { }
-            osc.disconnect();
-            this.activeOscillators.delete(note);
-        }
-    }
-
-    playChord(chord: Chord) {
+    /* ---------- chords (preview / sequence) ---------- */
+    playChord(chord: { notes: string[]; durationBeats?: number }) {
         this.resumeContext();
-        if (this.context.state !== "running") return; // wait for user gesture
-        // this.stopAllNotes();
-        const seconds = (60 / this.bpm) * chord.durationBeats;
-        chord.notes.forEach(n => this.playNote(n, seconds));
+
+        const now = this.context.currentTime;
+        const durationSec = chord.durationBeats ? this.beatsToSeconds(chord.durationBeats) : 0;
+
+        chord.notes.forEach(note => {
+            this.stopNote(note);
+
+            const osc = this.context.createOscillator();
+            const gain = this.context.createGain();
+
+            osc.type = this.sound;
+            osc.frequency.value = this.noteToFreq(note);
+
+            osc.connect(gain);
+            gain.connect(this.context.destination);
+
+            // attack
+            gain.gain.setValueAtTime(0, now);
+            gain.gain.linearRampToValueAtTime(0.8, now + 0.01);
+
+            osc.start(now);
+
+            if (durationSec > 0) {
+                const stopTime = now + durationSec;
+                gain.gain.setTargetAtTime(0, stopTime, 0.08);
+                osc.stop(stopTime + 0.1);
+            }
+
+            this.activeVoices.set(note, { osc, gain });
+        });
     }
 
+    /* ---------- sequence ---------- */
     playSequence(
         chords: { notes: string[]; durationBeats: number }[],
         startIndex = 0,
-        loop = true,
+        loop = false,
         onStep?: (chord: { notes: string[] }, index: number) => void
     ) {
-        if (this.sequenceTimeouts.length) this.stopSequence();
+        this.stopSequence();
 
         const schedule = (index: number) => {
-            if (!chords[index]) {
+            const chord = chords[index];
+            if (!chord) {
                 if (loop) schedule(0);
                 return;
             }
 
-            const chord = chords[index];
-
             this.playChord(chord);
             onStep?.(chord, index);
 
-            const durationMs = (60 / this.bpm) * chord.durationBeats * 1000;
-
-            const id = window.setTimeout(
-                () => schedule(index + 1),
-                durationMs
-            );
-
+            const durationMs = this.beatsToSeconds(chord.durationBeats) * 1000;
+            const id = window.setTimeout(() => schedule(index + 1), durationMs);
             this.sequenceTimeouts.push(id);
         };
 
         schedule(startIndex);
     }
 
-    stopSequence() {
-        this.sequenceTimeouts.forEach(id => clearTimeout(id));
-        this.sequenceTimeouts = [];
-        this.stopAllNotes(); // 🔑
+    stopNote(note: string) {
+        const voice = this.activeVoices.get(note);
+        if (!voice) return;
 
-        this.activeOscillators.forEach(osc => {
-            try { osc.stop(); } catch { }
-            osc.disconnect();
-        });
-        this.activeOscillators.clear();
+        const now = this.context.currentTime;
+        try {
+            voice.gain.gain.setTargetAtTime(0, now, 0.05);
+            voice.osc.stop(now + 0.1);
+        } catch { }
+        this.activeVoices.delete(note);
     }
 
-    resumeContext() {
-        if (this.context.state === "suspended") {
-            this.context.resume().catch(err => console.error("Failed to resume AudioContext:", err));
-        }
+    stopAllNotes() {
+        const now = this.context.currentTime;
+        this.activeVoices.forEach(({ osc, gain }) => {
+            try {
+                gain.gain.setTargetAtTime(0, now, 0.05);
+                osc.stop(now + 0.1);
+            } catch { }
+        });
+        this.activeVoices.clear();
+    }
+
+
+    stopSequence() {
+        this.sequenceTimeouts.forEach(clearTimeout);
+        this.sequenceTimeouts = [];
+        this.stopAllNotes();
     }
 
     panic() {
         this.stopSequence();
         this.stopAllNotes();
     }
-
-    stopAllNotes() {
-        this.activeOscillators.forEach(osc => {
-            try { osc.stop(); } catch { }
-            osc.disconnect();
-        });
-        this.activeOscillators.clear();
-    }
-
 }

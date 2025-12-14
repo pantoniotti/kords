@@ -40,6 +40,7 @@ type Props = {
 	onNoteOff: (note: string) => void;
 	onNoteClick: (note: string) => void;
 	onWidthChange?: (width: number) => void;
+	disabled?: boolean;
 };
 
 export default function Keyboard({
@@ -49,9 +50,12 @@ export default function Keyboard({
 	onNoteOn,
 	onNoteOff,
 	onNoteClick,
-	onWidthChange
+	onWidthChange,
+	disabled,
 }: Props) {
 
+	if (disabled) return null;
+	
 	/* ---------- visible keys ---------- */
 	const startIndex = Math.min(
 		Math.max(0, KEYS.findIndex(k => parseInt(k.slice(-1)) === baseOctave)),
@@ -110,6 +114,7 @@ export default function Keyboard({
 
 		return () => ro.disconnect();
 	}, [onWidthChange]);
+	
 	
 	/* ---------- render ---------- */
 	return (

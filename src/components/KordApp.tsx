@@ -30,21 +30,36 @@ export default function KordApp() {
 	const [loop, setLoop] = useState(false);
 	const [playheadIndex, setPlayheadIndex] = useState<number | null>(null);
 	const [keyboardWidth, setKeyboardWidth] = useState<number>(0);
+	const [soundReady, setSoundReady] = useState(false);
 
 	/* ---------- refs ---------- */
 	const audioEngine = useRef(new AudioEngine(120, "sine"));
 	const keyboardNotes = useRef<Set<string>>(new Set());
 
+	useEffect(() => {
+		audioEngine.current.loadSoundfont("acoustic_grand_piano");
+	}, []);
+
+	useEffect(() => {
+		audioEngine.current.loadSoundfont("acoustic_grand_piano")
+			.then(() => setSoundReady(true));
+	}, []);
+
 	/* ---------- resume audio ---------- */
 	useEffect(() => {
-		const resume = () => audioEngine.current.resumeContext();
-		window.addEventListener("mousedown", resume, { once: true });
-		window.addEventListener("keydown", resume, { once: true });
-		window.addEventListener("touchstart", resume, { once: true });
+		const unlockAudio = () => {
+			audioEngine.current.resumeContext();
+			audioEngine.current.loadSoundfont("acoustic_grand_piano");
+			setSoundReady(true);
+		};
+
+		window.addEventListener("mousedown", unlockAudio, { once: true });
+		window.addEventListener("keydown", unlockAudio, { once: true });
+		window.addEventListener("touchstart", unlockAudio, { once: true });
 		return () => {
-			window.removeEventListener("mousedown", resume);
-			window.removeEventListener("keydown", resume);
-			window.removeEventListener("touchstart", resume);
+			window.removeEventListener("mousedown", unlockAudio);
+			window.removeEventListener("keydown", unlockAudio);
+			window.removeEventListener("touchstart", unlockAudio);
 		};
 	}, []);
 
@@ -60,9 +75,9 @@ export default function KordApp() {
 		const matches = detectChord(chord);
 		setChordName(matches.length ? matches[0] : "—");
 
+		if (!soundReady) return;
 		audioEngine.current.playChord({ notes: chord });
 	};
-
 
 	/* ---------- KEYBOARD NOTE OFF ---------- */
 	const handleNoteOff = (note: string) => {
@@ -130,24 +145,49 @@ export default function KordApp() {
 		});
 	};
 
+	const safeNoteOn = (note: string) => {
+		if (!soundReady) return;
+		handleNoteOn(note);
+	};
+
+	const safeNoteOff = (note: string) => {
+		if (!soundReady) return;
+		handleNoteOff(note);
+	};
+
+	const safeNoteClick = (note: string) => {
+		if (!soundReady) return;
+		playNoteOnce(note);
+	};
+
 	const currentChord =
 		currentChordNotes.length && chordName !== "—"
 			? { label: chordName, notes: currentChordNotes }
 			: null;
 
+			
 	/* ---------- render ---------- */
 	return (
 		<div className="bg-gray-900 min-h-screen p-8 text-white flex flex-col items-center">
 			<h1 className="text-3xl font-bold mb-6">🎹 Chord Tool</h1>
 
+			{!soundReady && (
+				<div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+					<button className="px-6 py-3 text-xl bg-green-500 rounded">
+						Click to enable audio
+					</button>
+				</div>
+			)}
+
 			<Keyboard
 				baseOctave={baseOctave}
 				setBaseOctave={setBaseOctave}
 				activeNotes={currentChordNotes}
-				onNoteOn={handleNoteOn}
-				onNoteOff={handleNoteOff}
-				onNoteClick={playNoteOnce}
+				onNoteOn={safeNoteOn}
+				onNoteOff={safeNoteOff}
+				onNoteClick={safeNoteClick}
 				onWidthChange={setKeyboardWidth}
+				disabled={!soundReady}
 			/>
 
 			<ChordDisplay

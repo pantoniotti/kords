@@ -53,8 +53,6 @@ export default function Keyboard({
 	onWidthChange,
 	disabled,
 }: Props) {
-
-	if (disabled) return null;
 	
 	/* ---------- visible keys ---------- */
 	const startIndex = Math.min(
@@ -118,7 +116,12 @@ export default function Keyboard({
 	
 	/* ---------- render ---------- */
 	return (
-		<div ref={rootRef} id="keyboard-wrapper" className="p-4 bg-gray-800 rounded-xl shadow-lg">
+		<div 
+			ref={rootRef} 
+			id="keyboard-wrapper" 
+			className="p-4 bg-gray-800 rounded-xl shadow-lg"
+			style={{ pointerEvents: disabled ? "none" : "auto", opacity: disabled ? 0.5 : 1 }}
+		>
 			<div
 				className="relative mx-auto"
 				style={{ width: visibleWhiteKeys.length * whiteKeyWidth, height: 200 }}

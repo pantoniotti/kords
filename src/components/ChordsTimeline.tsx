@@ -9,10 +9,11 @@ import {
 	type DragStart,
 } from "@hello-pangea/dnd";
 
-import type { AudioEngine, SoundType } from "../helpers/AudioEngine";
-import SoundSelector from "./SoundSelector";
+import type { AudioEngine, InstrumentId, SoundType } from "../helpers/AudioEngine";
 import TimelineControls from "./TimelineControls";
 import TransportButtons from "./TransportButtons";
+import InstrumentSelector from "./InstrumentSelector";
+
 
 /* ---------- types ---------- */
 export type SavedChord = {
@@ -39,7 +40,9 @@ type Props = {
 	setLoop: (v: boolean) => void;
 
 	playheadIndex: number | null;
-	setPlayheadIndex: any
+	setPlayheadIndex: any;
+	instrument: InstrumentId;
+	changeInstrument: (id: InstrumentId) => void;
 };
 
 /* ---------- component ---------- */
@@ -53,12 +56,14 @@ export default function ChordTimeline({
 	loop,
 	setLoop,
 	playheadIndex,
-	setPlayheadIndex
+	setPlayheadIndex,
+	instrument,
+	changeInstrument
 }: Props) {
 
 	/* ---------- local state ---------- */
 	const [bpm, setBpm] = useState(128);
-	const [sound, setSound] = useState<SoundType>("sine");
+	const [sound, _setSound] = useState<SoundType>("sine");
 
 	const containerRef = useRef<HTMLDivElement | null>(null);
 	const altKeyRef = useRef(false);
@@ -181,7 +186,12 @@ export default function ChordTimeline({
 					setPlayheadIndex={setPlayheadIndex}
 				/>
 
-				<SoundSelector sound={sound} setSound={setSound} />
+				{/* <SoundSelector sound={sound} setSound={setSound} /> */}
+
+				<InstrumentSelector
+					current={instrument}
+					onChange={changeInstrument}
+				/>
 
 				<TimelineControls
 					bpm={bpm}

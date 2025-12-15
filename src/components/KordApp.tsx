@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { detect as detectChord } from "@tonaljs/chord-detect";
 import { Note } from "@tonaljs/tonal";
 
-import { AudioEngine } from "../helpers/AudioEngine";
+import { AudioEngine, type InstrumentId } from "../helpers/AudioEngine";
 import Keyboard from "./Keyboard";
 import ChordTimeline from "./ChordsTimeline";
 import ChordImportExport from "./ChordImportExport";
@@ -31,31 +31,45 @@ export default function KordApp() {
 	const [playheadIndex, setPlayheadIndex] = useState<number | null>(null);
 	const [keyboardWidth, setKeyboardWidth] = useState<number>(0);
 	const [soundReady, setSoundReady] = useState(false);
+	const [instrument, setInstrument] = useState<InstrumentId>("acoustic_grand_piano");
 
 	/* ---------- refs ---------- */
 	const audioEngine = useRef(new AudioEngine(120, "sine"));
-	const keyboardNotes = useRef<Set<string>>(new Set());
+	// notes currently physically held down
+	const pressedNotes = useRef<Set<string>>(new Set());
 
-	useEffect(() => {
-		audioEngine.current.loadSoundfont("acoustic_grand_piano");
-	}, []);
 
+	const changeInstrument = async (id: InstrumentId) => {
+		await audioEngine.current.loadSoundfont(id);
+
+		// Instrument-specific release
+		if (id.includes("pad")) audioEngine.current.setReleaseTime(1.2);
+		else if (id.includes("string")) audioEngine.current.setReleaseTime(0.8);
+		else audioEngine.current.setReleaseTime(0.25);
+
+		setInstrument(id);
+	};
+
+	const soundReadyRef = useRef(false);
+
+	/* ---------- sound ready ---------- */
 	useEffect(() => {
-		audioEngine.current.loadSoundfont("acoustic_grand_piano")
-			.then(() => setSoundReady(true));
-	}, []);
+		soundReadyRef.current = soundReady;
+	}, [soundReady]);
+
 
 	/* ---------- resume audio ---------- */
 	useEffect(() => {
-		const unlockAudio = () => {
+		const unlockAudio = async () => {
 			audioEngine.current.resumeContext();
-			audioEngine.current.loadSoundfont("acoustic_grand_piano");
-			setSoundReady(true);
+			await audioEngine.current.loadSoundfont("acoustic_grand_piano");
+			setSoundReady(true); // ✅ only set after SoundFont is loaded
 		};
 
 		window.addEventListener("mousedown", unlockAudio, { once: true });
 		window.addEventListener("keydown", unlockAudio, { once: true });
 		window.addEventListener("touchstart", unlockAudio, { once: true });
+
 		return () => {
 			window.removeEventListener("mousedown", unlockAudio);
 			window.removeEventListener("keydown", unlockAudio);
@@ -63,30 +77,43 @@ export default function KordApp() {
 		};
 	}, []);
 
-	/* ---------- KEYBOARD NOTE ON ---------- */
+
+	/* ---------- KEYBOARD / MOUSE ---------- */
 	const handleNoteOn = (note: string) => {
-		keyboardNotes.current.add(note);
+		if (!soundReadyRef.current) return;
 
-		const chord = sortNotesByPitch(Array.from(keyboardNotes.current));
+		// already held → ignore (important for polyphony)
+		if (pressedNotes.current.has(note)) return;
 
-		// 🔒 COMMIT chord
+		pressedNotes.current.add(note);
+
+		// 🔊 audio: play ONLY this note
+		audioEngine.current.playNote(note);
+
+		// 🎼 commit chord visually
+		const chord = sortNotesByPitch(Array.from(pressedNotes.current));
 		setCurrentChordNotes(chord);
 
 		const matches = detectChord(chord);
 		setChordName(matches.length ? matches[0] : "—");
-
-		if (!soundReady) return;
-		audioEngine.current.playChord({ notes: chord });
 	};
 
-	/* ---------- KEYBOARD NOTE OFF ---------- */
+
 	const handleNoteOff = (note: string) => {
-		keyboardNotes.current.delete(note);
+		if (!soundReadyRef.current) return;
+
+		if (!pressedNotes.current.has(note)) return;
+
+		pressedNotes.current.delete(note);
+
+		// 🔊 audio only
 		audioEngine.current.stopNote(note);
 	};
 
 	/* ---------- MOUSE CLICK NOTE ---------- */
-	const playNoteOnce = (note: string) => {
+	const handleNoteClick = (note: string) => {
+		if (!soundReadyRef.current) return;
+
 		let next: string[];
 
 		if (currentChordNotes.includes(note)) {
@@ -104,7 +131,7 @@ export default function KordApp() {
 		setChordName(matches.length ? matches[0] : "—");
 	};
 
-	/* ---------- SEQUENCE ---------- */
+	/* ---------- PLAY SEQUENCE ---------- */
 	const handleSequencePlay = (startIndex = 0) => {
 		if (!savedChords.length) return;
 
@@ -129,7 +156,7 @@ export default function KordApp() {
 		);
 	};
 
-	/* ---------- TIMELINE PREVIEW ---------- */
+	/* ---------- CHORD PREVIEW ---------- */
 	const handlePreviewChord = (chord: { notes: string[]; duration?: number }) => {
 		const notes = sortNotesByPitch(chord.notes);
 
@@ -146,18 +173,15 @@ export default function KordApp() {
 	};
 
 	const safeNoteOn = (note: string) => {
-		if (!soundReady) return;
 		handleNoteOn(note);
 	};
 
 	const safeNoteOff = (note: string) => {
-		if (!soundReady) return;
 		handleNoteOff(note);
 	};
 
 	const safeNoteClick = (note: string) => {
-		if (!soundReady) return;
-		playNoteOnce(note);
+		handleNoteClick(note);
 	};
 
 	const currentChord =
@@ -207,6 +231,8 @@ export default function KordApp() {
 				setLoop={setLoop}
 				playheadIndex={playheadIndex}
 				setPlayheadIndex={setPlayheadIndex}
+				instrument={instrument}
+				changeInstrument={changeInstrument}
 			/>
 
 			<div className="mt-4">

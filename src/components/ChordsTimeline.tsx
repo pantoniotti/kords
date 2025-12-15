@@ -90,6 +90,15 @@ export default function ChordTimeline({
 		};
 	}, []);
 
+	/* ---------- ensure IDs ---------- */
+	useEffect(() => {
+		if (timeline.some(c => !c.id)) {
+			setTimeline(prev =>
+				prev.map(c => (c.id ? c : { ...c, id: crypto.randomUUID() }))
+			);
+		}
+	}, [timeline, setTimeline]);
+	
 	/* ---------- drag & drop ---------- */
 	const onDragStart = (_: DragStart) => { };
 
@@ -164,14 +173,24 @@ export default function ChordTimeline({
 		} catch { }
 	};
 
-	/* ---------- ensure IDs ---------- */
-	useEffect(() => {
-		if (timeline.some(c => !c.id)) {
-			setTimeline(prev =>
-				prev.map(c => (c.id ? c : { ...c, id: crypto.randomUUID() }))
-			);
-		}
-	}, [timeline, setTimeline]);
+	const TrashIcon = ({ className = "" }) => (
+		<svg
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="2"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+			className={className}
+		>
+			<polyline points="3 6 5 6 21 6" />
+			<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+			<path d="M10 11v6" />
+			<path d="M14 11v6" />
+			<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+		</svg>
+	);
+
 
 	/* ---------- render ---------- */
 	return (
@@ -228,11 +247,7 @@ export default function ChordTimeline({
 										const isPlaying = playheadIndex === index;
 
 										return (
-											<Draggable
-												key={chord.id!}
-												draggableId={chord.id!}
-												index={index}
-											>
+											<Draggable key={chord.id!} draggableId={chord.id!} index={index}>
 												{drag => (
 													<div
 														ref={drag.innerRef}
@@ -240,10 +255,11 @@ export default function ChordTimeline({
 														{...drag.dragHandleProps}
 														data-tl-item
 														className={`
-															relative px-6 py-6 w-[120px] rounded-xl cursor-pointer
-															text-white select-none align-center flex items-center justify-center
-															${isPlaying ? "ring-2 ring-white scale-105" : ""}
-														`}
+				relative px-6 py-6 w-[120px] rounded-xl cursor-pointer
+				text-white select-none flex items-center justify-center
+				transition
+				${isPlaying ? "ring-2 ring-white scale-105" : ""}
+			`}
 														style={{
 															backgroundColor: chord.color ?? "#4b5563",
 															...drag.draggableProps.style,
@@ -251,26 +267,35 @@ export default function ChordTimeline({
 														}}
 														onMouseDown={e => {
 															e.preventDefault();
-															// Stop any running sequence
 															audioEngine.stopSequence();
-															// Mark this chord as selected
 															setPlayheadIndex(index);
-															// Play it + update keyboard / display
 															onPreviewChord(chord);
 														}}
-
 													>
+														{/* 🗑️ Trash button */}
 														<button
-															className="absolute -top-1 -right-1 bg-red-600 rounded-full w-6 h-6 text-xs"
+															className="
+					absolute bottom-2 left-2
+					p-1 rounded-md
+					text-white/70
+					hover:text-white hover:bg-white/20
+					transition
+					pointer-events-auto
+				"
+															onMouseDown={e => {
+																e.stopPropagation(); // 🚫 prevent chord play
+																e.preventDefault();
+															}}
 															onClick={e => {
 																e.stopPropagation();
 																deleteChord(index);
 															}}
 														>
-															✕
+															<TrashIcon className="w-4 h-4" />
 														</button>
 
-														<div className="font-semibold">
+														{/* Label */}
+														<div className="font-semibold pointer-events-none">
 															{chord.label}
 														</div>
 													</div>

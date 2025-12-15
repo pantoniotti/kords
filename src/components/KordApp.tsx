@@ -32,6 +32,7 @@ export default function KordApp() {
 	const [keyboardWidth, setKeyboardWidth] = useState<number>(0);
 	const [soundReady, setSoundReady] = useState(false);
 	const [instrument, setInstrument] = useState<InstrumentId>("acoustic_grand_piano");
+	const [isPlaying, setIsPlaying] = useState(false);
 
 	/* ---------- refs ---------- */
 	const audioEngine = useRef(new AudioEngine(120, "sine"));
@@ -76,6 +77,26 @@ export default function KordApp() {
 			window.removeEventListener("touchstart", unlockAudio);
 		};
 	}, []);
+
+	useEffect(() => {
+		const onKeyDown = (e: KeyboardEvent) => {
+			// prevent auto-repeat
+			if (e.repeat) return;
+
+			if (e.code === "Space") {
+				e.preventDefault();
+
+				if (isPlaying) {
+					stopSequence();
+				} else {
+					handlePlaySequence(0);
+				}
+			}
+		};
+
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, [isPlaying, savedChords, loop]);
 
 
 	/* ---------- Keyboard press ---------- */
@@ -132,7 +153,7 @@ export default function KordApp() {
 	};
 
 	/* ---------- Play sequence ---------- */
-	const handleSequencePlay = (startIndex = 0) => {
+	const handlePlaySequence = (startIndex = 0) => {
 		if (!savedChords.length) return;
 
 		audioEngine.current.playSequence(
@@ -144,9 +165,7 @@ export default function KordApp() {
 			loop,
 			(chord, index) => {
 				const notes = sortNotesByPitch(chord.notes);
-
 				setPlayheadIndex(index);
-
 				// 🔒 COMMIT chord
 				setCurrentChordNotes(notes);
 
@@ -154,7 +173,17 @@ export default function KordApp() {
 				setChordName(matches.length ? matches[0] : "—");
 			}
 		);
+
+		setIsPlaying(true);
 	};
+
+	/* ---------- Stop sequence ---------- */
+	const stopSequence = () => {
+		audioEngine.current.stopSequence();
+		setPlayheadIndex(null);
+		setIsPlaying(false);
+	};
+
 
 	/* ---------- Play chord preview ---------- */
 	const handlePreviewChord = (chord: { notes: string[]; duration?: number }) => {
@@ -225,7 +254,7 @@ export default function KordApp() {
 				setTimeline={setSavedChords}
 				width={keyboardWidth}
 				audioEngine={audioEngine.current}
-				playSequence={handleSequencePlay}
+				playSequence={handlePlaySequence}
 				onPreviewChord={handlePreviewChord}
 				loop={loop}
 				setLoop={setLoop}

@@ -2,6 +2,7 @@
 import type { AudioEngine } from "../helpers/AudioEngine";
 import RippleButton from "../atoms/RippleButton";
 import { SkipBack, Play, Square, SkipForward } from "lucide-react";
+import { PlayIcon, StopIcon } from "./icons/TransportIcons";
 
 type Props = {
     playheadIndex: number | null;
@@ -43,7 +44,7 @@ export default function TransportButtons({
                     playSequence(playheadIndex ?? 0);
                 }}
             >
-                <Play size={20} />
+                <PlayIcon className="w-5 h-5" />
             </RippleButton>
 
             {/* stop button */}
@@ -55,7 +56,7 @@ export default function TransportButtons({
                     }
                 }
             >
-                <Square size={20} />
+                <StopIcon className="w-5 h-5" />
             </RippleButton>
 
             {/* forward button */}

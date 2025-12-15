@@ -18,7 +18,7 @@ type ActiveVoice = {
 };
 
 export class AudioEngine {
-    private context: AudioContext;
+    private context: AudioContext | null = null;
     private bpm: number;
     private sound: SoundType;
 
@@ -63,10 +63,28 @@ export class AudioEngine {
 
     /* ---------- Context ---------- */
     resumeContext() {
-        if (this.context.state === "suspended") {
-            this.context.resume().catch(console.error);
+        this.ensureContext();
+
+        if (this.context!.state === "suspended") {
+            this.context!.resume().catch(console.error);
         }
     }
+
+    private ensureContext() {
+        if (!this.context || this.context.state === "closed") {
+            this.context = new AudioContext({ latencyHint: "interactive" });
+
+            this.masterGain = this.context.createGain();
+            this.masterGain.gain.value = 1.8;
+            this.masterGain.connect(this.context.destination);
+        }
+    }
+
+    private getContext(): AudioContext {
+        this.ensureContext();
+        return this.context!;
+    }
+
 
     /* ---------- Utils ---------- */
     private noteToFreq(note: string) {
@@ -86,15 +104,17 @@ export class AudioEngine {
 
     private playNoteWithSoundfont(note: string, durationSec: number) {
         if (this.useSoundfont && this.sfInstrument) {
-            const stopFn = this.playSfNote(note, this.context.currentTime);
+            const ctx = this.getContext();
+            const stopFn = this.playSfNote(note, ctx.currentTime);
             if (durationSec) setTimeout(stopFn, durationSec * 1000);
         }
     }
 
     private playNoteWithWebAudio(note: string, durationSec?: number) {
-        const osc = this.context.createOscillator();
-        const gain = this.context.createGain();
-        const now = this.context.currentTime;
+        const ctx = this.getContext();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        const now = ctx.currentTime;
 
         osc.type = this.sound;
         osc.frequency.value = this.noteToFreq(note);
@@ -128,9 +148,9 @@ export class AudioEngine {
 
     private playChordWithWebAudio(chord: { notes: string[]; durationBeats?: number }, now: number, durationSec?: number) {
         chord.notes.forEach(note => {
-            // if (this.activeVoices.has(note)) return; // do not stop existing note
-            const osc = this.context.createOscillator();
-            const gain = this.context.createGain();
+            const ctx = this.getContext();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
 
             osc.type = this.sound;
             osc.frequency.value = this.noteToFreq(note);
@@ -154,12 +174,21 @@ export class AudioEngine {
     }
 
     private playSfNote(note: string, time: number, gain = 2.5) {
-        if (!this.sfInstrument) return () => { };
+        if (!this.sfInstrument || !this.context) return () => { };
 
         const node = this.sfInstrument.play(note, time, { gain });
+        let stopped = false;
 
         const stopFn = () => {
-            try { node.stop(); } catch { }
+            if (stopped) return;
+            stopped = true;
+
+            try {
+                node.stop();
+            } catch {
+                // ignore — renderer already stopped
+            }
+
             const set = this.sfActiveNotes.get(note);
             if (set) {
                 set.delete(stopFn);
@@ -167,11 +196,14 @@ export class AudioEngine {
             }
         };
 
-        if (!this.sfActiveNotes.has(note)) this.sfActiveNotes.set(note, new Set());
+        if (!this.sfActiveNotes.has(note)) {
+            this.sfActiveNotes.set(note, new Set());
+        }
         this.sfActiveNotes.get(note)!.add(stopFn);
 
         return stopFn;
     }
+
 
     /* ---------- SoundFont ---------- */
     async loadSoundfont(name: InstrumentId) {
@@ -186,7 +218,7 @@ export class AudioEngine {
 
         this.soundfontReady = false;
 
-        const instrument = await Soundfont.instrument(this.context, name, { gain: 0.9 });
+        const instrument = await Soundfont.instrument(this.getContext(), name, { gain: 0.9 });
         this.sfInstruments.set(name, instrument);
         this.sfInstrument = instrument;
         this.useSoundfont = true;
@@ -210,7 +242,7 @@ export class AudioEngine {
     /* ---------- Play Chord ---------- */
     playChord(chord: { notes: string[]; durationBeats?: number }) {
         this.resumeContext();
-        const now = this.context.currentTime;
+        const now = this.getContext().currentTime;
         const durationSec = chord.durationBeats ? this.beatsToSeconds(chord.durationBeats) : undefined;
 
         if (this.useSoundfont && this.soundfontReady) {
@@ -259,14 +291,14 @@ export class AudioEngine {
         const voice = this.activeVoices.get(note);
         if (!voice) return;
 
-        const now = this.context.currentTime;
+        const now = this.getContext().currentTime;
         voice.gain.gain.setTargetAtTime(0, now, this.noteReleaseSec);
         voice.osc.stop(now + this.noteReleaseSec + 0.05);
         this.activeVoices.delete(note);
     }
 
     stopAllNotes() {
-        const now = this.context.currentTime;
+        const now = this.getContext().currentTime;
 
         this.activeVoices.forEach(({ osc, gain }) => {
             try {

@@ -40,6 +40,7 @@ type Props = {
 	onNoteOff: (note: string) => void;
 	onNoteClick: (note: string) => void;
 	onWidthChange?: (width: number) => void;
+	disabled?: boolean;
 };
 
 export default function Keyboard({
@@ -49,9 +50,10 @@ export default function Keyboard({
 	onNoteOn,
 	onNoteOff,
 	onNoteClick,
-	onWidthChange
+	onWidthChange,
+	disabled,
 }: Props) {
-
+	
 	/* ---------- visible keys ---------- */
 	const startIndex = Math.min(
 		Math.max(0, KEYS.findIndex(k => parseInt(k.slice(-1)) === baseOctave)),
@@ -111,9 +113,15 @@ export default function Keyboard({
 		return () => ro.disconnect();
 	}, [onWidthChange]);
 	
+	
 	/* ---------- render ---------- */
 	return (
-		<div ref={rootRef} id="keyboard-wrapper" className="p-4 bg-gray-800 rounded-xl shadow-lg">
+		<div 
+			ref={rootRef} 
+			id="keyboard-wrapper" 
+			className="p-4 bg-gray-800 rounded-xl shadow-lg"
+			style={{ pointerEvents: disabled ? "none" : "auto", opacity: disabled ? 0.5 : 1 }}
+		>
 			<div
 				className="relative mx-auto"
 				style={{ width: visibleWhiteKeys.length * whiteKeyWidth, height: 200 }}

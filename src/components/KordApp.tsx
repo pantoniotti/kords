@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { detect as detectChord } from "@tonaljs/chord-detect";
 import { Note } from "@tonaljs/tonal";
 
-import { AudioEngine } from "../helpers/AudioEngine";
+import { AudioEngine, type InstrumentId } from "../helpers/AudioEngine";
 import Keyboard from "./Keyboard";
 import ChordTimeline from "./ChordsTimeline";
 import ChordImportExport from "./ChordImportExport";
@@ -30,48 +30,90 @@ export default function KordApp() {
 	const [loop, setLoop] = useState(false);
 	const [playheadIndex, setPlayheadIndex] = useState<number | null>(null);
 	const [keyboardWidth, setKeyboardWidth] = useState<number>(0);
+	const [soundReady, setSoundReady] = useState(false);
+	const [instrument, setInstrument] = useState<InstrumentId>("acoustic_grand_piano");
 
 	/* ---------- refs ---------- */
 	const audioEngine = useRef(new AudioEngine(120, "sine"));
-	const keyboardNotes = useRef<Set<string>>(new Set());
+	// notes currently physically held down
+	const pressedNotes = useRef<Set<string>>(new Set());
+	
+	/* ---------- change instrument ---------- */
+	const changeInstrument = async (id: InstrumentId) => {
+		await audioEngine.current.loadSoundfont(id);
+
+		// Instrument-specific release
+		if (id.includes("pad")) audioEngine.current.setReleaseTime(1.2);
+		else if (id.includes("string")) audioEngine.current.setReleaseTime(0.8);
+		else audioEngine.current.setReleaseTime(0.25);
+
+		setInstrument(id);
+	};
+
+	/* ---------- sound ready ref ---------- */
+	const soundReadyRef = useRef(false);
+
+	/* ---------- sound ready ---------- */
+	useEffect(() => {
+		soundReadyRef.current = soundReady;
+	}, [soundReady]);
 
 	/* ---------- resume audio ---------- */
 	useEffect(() => {
-		const resume = () => audioEngine.current.resumeContext();
-		window.addEventListener("mousedown", resume, { once: true });
-		window.addEventListener("keydown", resume, { once: true });
-		window.addEventListener("touchstart", resume, { once: true });
+		const unlockAudio = async () => {
+			audioEngine.current.resumeContext();
+			await audioEngine.current.loadSoundfont("acoustic_grand_piano");
+			setSoundReady(true); // ✅ only set after SoundFont is loaded
+		};
+
+		window.addEventListener("mousedown", unlockAudio, { once: true });
+		window.addEventListener("keydown", unlockAudio, { once: true });
+		window.addEventListener("touchstart", unlockAudio, { once: true });
+
 		return () => {
-			window.removeEventListener("mousedown", resume);
-			window.removeEventListener("keydown", resume);
-			window.removeEventListener("touchstart", resume);
+			window.removeEventListener("mousedown", unlockAudio);
+			window.removeEventListener("keydown", unlockAudio);
+			window.removeEventListener("touchstart", unlockAudio);
 		};
 	}, []);
 
-	/* ---------- KEYBOARD NOTE ON ---------- */
+
+	/* ---------- Keyboard press ---------- */
 	const handleNoteOn = (note: string) => {
-		keyboardNotes.current.add(note);
+		if (!soundReadyRef.current) return;
 
-		const chord = sortNotesByPitch(Array.from(keyboardNotes.current));
+		// already held → ignore (important for polyphony)
+		if (pressedNotes.current.has(note)) return;
 
-		// 🔒 COMMIT chord
+		pressedNotes.current.add(note);
+
+		// 🔊 audio: play ONLY this note
+		audioEngine.current.playNote(note);
+
+		// 🎼 commit chord visually
+		const chord = sortNotesByPitch(Array.from(pressedNotes.current));
 		setCurrentChordNotes(chord);
 
 		const matches = detectChord(chord);
 		setChordName(matches.length ? matches[0] : "—");
-
-		audioEngine.current.playChord({ notes: chord });
 	};
 
-
-	/* ---------- KEYBOARD NOTE OFF ---------- */
+	/* ---------- Keyboard release ---------- */
 	const handleNoteOff = (note: string) => {
-		keyboardNotes.current.delete(note);
+		if (!soundReadyRef.current) return;
+
+		if (!pressedNotes.current.has(note)) return;
+
+		pressedNotes.current.delete(note);
+
+		// 🔊 audio only
 		audioEngine.current.stopNote(note);
 	};
 
-	/* ---------- MOUSE CLICK NOTE ---------- */
-	const playNoteOnce = (note: string) => {
+	/* ---------- Mouse click ---------- */
+	const handleNoteClick = (note: string) => {
+		if (!soundReadyRef.current) return;
+
 		let next: string[];
 
 		if (currentChordNotes.includes(note)) {
@@ -89,7 +131,7 @@ export default function KordApp() {
 		setChordName(matches.length ? matches[0] : "—");
 	};
 
-	/* ---------- SEQUENCE ---------- */
+	/* ---------- Play sequence ---------- */
 	const handleSequencePlay = (startIndex = 0) => {
 		if (!savedChords.length) return;
 
@@ -114,7 +156,7 @@ export default function KordApp() {
 		);
 	};
 
-	/* ---------- TIMELINE PREVIEW ---------- */
+	/* ---------- Play chord preview ---------- */
 	const handlePreviewChord = (chord: { notes: string[]; duration?: number }) => {
 		const notes = sortNotesByPitch(chord.notes);
 
@@ -130,24 +172,46 @@ export default function KordApp() {
 		});
 	};
 
+	const safeNoteOn = (note: string) => {
+		handleNoteOn(note);
+	};
+
+	const safeNoteOff = (note: string) => {
+		handleNoteOff(note);
+	};
+
+	const safeNoteClick = (note: string) => {
+		handleNoteClick(note);
+	};
+
 	const currentChord =
 		currentChordNotes.length && chordName !== "—"
 			? { label: chordName, notes: currentChordNotes }
 			: null;
 
+			
 	/* ---------- render ---------- */
 	return (
 		<div className="bg-gray-900 min-h-screen p-8 text-white flex flex-col items-center">
 			<h1 className="text-3xl font-bold mb-6">🎹 Chord Tool</h1>
 
+			{!soundReady && (
+				<div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+					<button className="px-6 py-3 text-xl bg-green-500 rounded">
+						Click to enable audio
+					</button>
+				</div>
+			)}
+
 			<Keyboard
 				baseOctave={baseOctave}
 				setBaseOctave={setBaseOctave}
 				activeNotes={currentChordNotes}
-				onNoteOn={handleNoteOn}
-				onNoteOff={handleNoteOff}
-				onNoteClick={playNoteOnce}
+				onNoteOn={safeNoteOn}
+				onNoteOff={safeNoteOff}
+				onNoteClick={safeNoteClick}
 				onWidthChange={setKeyboardWidth}
+				disabled={!soundReady}
 			/>
 
 			<ChordDisplay
@@ -167,6 +231,8 @@ export default function KordApp() {
 				setLoop={setLoop}
 				playheadIndex={playheadIndex}
 				setPlayheadIndex={setPlayheadIndex}
+				instrument={instrument}
+				changeInstrument={changeInstrument}
 			/>
 
 			<div className="mt-4">

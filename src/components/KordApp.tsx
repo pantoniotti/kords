@@ -1,7 +1,7 @@
 // src/KordApp.tsx
 import { useEffect, useRef, useState } from "react";
 import { detect as detectChord } from "@tonaljs/chord-detect";
-import { Note } from "@tonaljs/tonal";
+import { Note, Midi } from "@tonaljs/tonal";
 
 import { AudioEngine, type InstrumentId } from "../helpers/AudioEngine";
 import Keyboard from "./Keyboard";
@@ -11,6 +11,7 @@ import ChordDisplay from "./ChordDisplay";
 
 const BEATS_PER_BAR = 4;
 
+/* ---------- helpers ---------- */
 function sortNotesByPitch(notes: string[]) {
 	return [...notes].sort((a, b) => {
 		const ma = Note.midi(a);
@@ -20,6 +21,7 @@ function sortNotesByPitch(notes: string[]) {
 	});
 }
 
+/* ---------- component ---------- */
 export default function KordApp() {
 	/* ---------- state ---------- */
 	const [currentChordNotes, setCurrentChordNotes] = useState<string[]>([]);
@@ -36,14 +38,16 @@ export default function KordApp() {
 
 	/* ---------- refs ---------- */
 	const audioEngine = useRef(new AudioEngine(120, "sine"));
-	// notes currently physically held down
+
+	// notes currently physically held down (keyboard + MIDI)
 	const pressedNotes = useRef<Set<string>>(new Set());
-	
+
+	const soundReadyRef = useRef(false);
+
 	/* ---------- change instrument ---------- */
 	const changeInstrument = async (id: InstrumentId) => {
 		await audioEngine.current.loadSoundfont(id);
 
-		// Instrument-specific release
 		if (id.includes("pad")) audioEngine.current.setReleaseTime(1.2);
 		else if (id.includes("string")) audioEngine.current.setReleaseTime(0.8);
 		else audioEngine.current.setReleaseTime(0.25);
@@ -51,10 +55,24 @@ export default function KordApp() {
 		setInstrument(id);
 	};
 
-	/* ---------- sound ready ref ---------- */
-	const soundReadyRef = useRef(false);
+	/* ---------- spacebar transport ---------- */
+	useEffect(() => {
+		const onKeyDown = (e: KeyboardEvent) => {
+			if (e.repeat) return;
 
-	/* ---------- sound ready ---------- */
+			if (e.code === "Space") {
+				e.preventDefault();
+				if (isPlaying) stopSequence();
+				else handlePlaySequence(0);
+			}
+		};
+
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, [isPlaying, savedChords, loop]);
+
+
+	/* ---------- sound ready ref ---------- */
 	useEffect(() => {
 		soundReadyRef.current = soundReady;
 	}, [soundReady]);
@@ -78,6 +96,7 @@ export default function KordApp() {
 		};
 	}, []);
 
+	/* ---------- spacebar transport ---------- */
 	useEffect(() => {
 		const onKeyDown = (e: KeyboardEvent) => {
 			// prevent auto-repeat
@@ -98,6 +117,59 @@ export default function KordApp() {
 		return () => window.removeEventListener("keydown", onKeyDown);
 	}, [isPlaying, savedChords, loop]);
 
+
+	/* ---------- MIDI support ---------- */
+	useEffect(() => {
+		if (!navigator.requestMIDIAccess) {
+			console.warn("Web MIDI not supported");
+			return;
+		}
+
+		let midi: MIDIAccess | null = null;
+
+		const onMidiMessage = (e: MIDIMessageEvent) => {
+			if (!soundReadyRef.current) return;
+			if (!e.data) return;
+
+			const [status, noteNumber, velocity = 0] = e.data;
+			const command = status & 0xf0;
+
+			const note = Midi.midiToNoteName(noteNumber, { sharps: true });
+
+			if (!note) return;
+
+			// NOTE ON (velocity > 0)
+			if (command === 0x90 && velocity > 0) {
+				handleNoteOn(note);
+			}
+			// NOTE OFF (0x80 or NoteOn with velocity 0)
+			else if (command === 0x80 || (command === 0x90 && velocity === 0)) {
+				handleNoteOff(note);
+			}
+		};
+
+		navigator.requestMIDIAccess().then(access => {
+			midi = access;
+
+			for (const input of midi.inputs.values()) {
+				input.onmidimessage = onMidiMessage;
+			}
+
+			// Handle hot-plugging MIDI devices
+			midi.onstatechange = () => {
+				for (const input of midi!.inputs.values()) {
+					input.onmidimessage = onMidiMessage;
+				}
+			};
+		});
+
+		return () => {
+			if (!midi) return;
+			for (const input of midi.inputs.values()) {
+				input.onmidimessage = null;
+			}
+		};
+	}, []);
 
 	/* ---------- Keyboard press ---------- */
 	const handleNoteOn = (note: string) => {
@@ -201,24 +273,11 @@ export default function KordApp() {
 		});
 	};
 
-	const safeNoteOn = (note: string) => {
-		handleNoteOn(note);
-	};
-
-	const safeNoteOff = (note: string) => {
-		handleNoteOff(note);
-	};
-
-	const safeNoteClick = (note: string) => {
-		handleNoteClick(note);
-	};
-
 	const currentChord =
 		currentChordNotes.length && chordName !== "—"
 			? { label: chordName, notes: currentChordNotes }
 			: null;
 
-			
 	/* ---------- render ---------- */
 	return (
 		<div className="bg-gray-900 min-h-screen p-8 text-white flex flex-col items-center">
@@ -236,9 +295,9 @@ export default function KordApp() {
 				baseOctave={baseOctave}
 				setBaseOctave={setBaseOctave}
 				activeNotes={currentChordNotes}
-				onNoteOn={safeNoteOn}
-				onNoteOff={safeNoteOff}
-				onNoteClick={safeNoteClick}
+				onNoteOn={handleNoteOn}
+				onNoteOff={handleNoteOff}
+				onNoteClick={handleNoteClick}
 				onWidthChange={setKeyboardWidth}
 				disabled={!soundReady}
 			/>

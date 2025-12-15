@@ -13,7 +13,7 @@ import type { AudioEngine, InstrumentId, SoundType } from "../helpers/AudioEngin
 import TimelineControls from "./TimelineControls";
 import TransportButtons from "./TransportButtons";
 import InstrumentSelector from "./InstrumentSelector";
-
+import { PlayIcon, StopIcon, TrashIcon } from "./icons/TransportIcons";
 
 /* ---------- types ---------- */
 export type SavedChord = {
@@ -67,6 +67,8 @@ export default function ChordTimeline({
 
 	const containerRef = useRef<HTMLDivElement | null>(null);
 	const altKeyRef = useRef(false);
+	const manualPlayIndexRef = useRef<number | null>(null);
+
 
 	/* ---------- engine sync ---------- */
 	useEffect(() => {
@@ -173,25 +175,6 @@ export default function ChordTimeline({
 		} catch { }
 	};
 
-	const TrashIcon = ({ className = "" }) => (
-		<svg
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			strokeWidth="2"
-			strokeLinecap="round"
-			strokeLinejoin="round"
-			className={className}
-		>
-			<polyline points="3 6 5 6 21 6" />
-			<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-			<path d="M10 11v6" />
-			<path d="M14 11v6" />
-			<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-		</svg>
-	);
-
-
 	/* ---------- render ---------- */
 	return (
 		<div className="mt-8 mx-auto flex flex-col gap-3" style={{ width }}>
@@ -255,11 +238,11 @@ export default function ChordTimeline({
 														{...drag.dragHandleProps}
 														data-tl-item
 														className={`
-				relative px-6 py-6 w-[120px] rounded-xl cursor-pointer
-				text-white select-none flex items-center justify-center
-				transition
-				${isPlaying ? "ring-2 ring-white scale-105" : ""}
-			`}
+															relative px-6 py-7 w-[120px] rounded-xl cursor-pointer
+															text-white select-none flex items-center justify-center
+															transition
+															${isPlaying ? "ring-2 ring-white scale-105" : ""}
+														`}
 														style={{
 															backgroundColor: chord.color ?? "#4b5563",
 															...drag.draggableProps.style,
@@ -268,20 +251,20 @@ export default function ChordTimeline({
 														onMouseDown={e => {
 															e.preventDefault();
 															audioEngine.stopSequence();
+															manualPlayIndexRef.current = null;
 															setPlayheadIndex(index);
-															onPreviewChord(chord);
 														}}
 													>
 														{/* 🗑️ Trash button */}
 														<button
 															className="
-					absolute bottom-2 left-2
-					p-1 rounded-md
-					text-white/70
-					hover:text-white hover:bg-white/20
-					transition
-					pointer-events-auto
-				"
+																absolute bottom-1 left-1
+																p-1 rounded-md
+																text-white/70
+																hover:text-white hover:bg-white/20
+																transition
+																pointer-events-auto
+															"
 															onMouseDown={e => {
 																e.stopPropagation(); // 🚫 prevent chord play
 																e.preventDefault();
@@ -298,6 +281,41 @@ export default function ChordTimeline({
 														<div className="font-semibold pointer-events-none">
 															{chord.label}
 														</div>
+
+														{/* ▶️ / ⏹ Play button */}
+														<button
+															className="
+															absolute bottom-1 right-1
+															p-1 rounded-md
+															text-white/70
+															hover:text-white hover:bg-white/20
+															transition
+														"
+															onMouseDown={e => {
+																e.stopPropagation();
+																e.preventDefault();
+															}}
+															onClick={e => {
+																e.stopPropagation();
+
+																if (isPlaying && manualPlayIndexRef.current === index) {
+																	audioEngine.stopSequence();
+																	manualPlayIndexRef.current = null;
+																	setPlayheadIndex(null);
+																} else {
+																	audioEngine.stopSequence();
+																	manualPlayIndexRef.current = index;
+																	setPlayheadIndex(index);
+																	onPreviewChord(chord);
+																}
+															}}
+														>
+															{isPlaying && manualPlayIndexRef.current === index ? (
+																<StopIcon className="w-4 h-4" />
+															) : (
+																<PlayIcon className="w-4 h-4" />
+															)}
+														</button>
 													</div>
 												)}
 											</Draggable>

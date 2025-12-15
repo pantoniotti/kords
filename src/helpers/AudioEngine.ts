@@ -30,7 +30,6 @@ export class AudioEngine {
 
     private sfInstruments: Map<InstrumentId, Soundfont.Player> = new Map();
     private sfInstrument: Soundfont.Player | null = null;
-    private currentInstrument: InstrumentId = "acoustic_grand_piano";
     private useSoundfont = false;
     private soundfontReady = false;
     private noteReleaseSec = 0.25;
@@ -180,7 +179,6 @@ export class AudioEngine {
 
         if (this.sfInstruments.has(name)) {
             this.sfInstrument = this.sfInstruments.get(name)!;
-            this.currentInstrument = name;
             this.useSoundfont = true;
             this.soundfontReady = true;
             return;
@@ -191,7 +189,6 @@ export class AudioEngine {
         const instrument = await Soundfont.instrument(this.context, name, { gain: 0.9 });
         this.sfInstruments.set(name, instrument);
         this.sfInstrument = instrument;
-        this.currentInstrument = name;
         this.useSoundfont = true;
         this.soundfontReady = true;
     }

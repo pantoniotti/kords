@@ -85,46 +85,14 @@ export class AudioEngine {
         return (60 / this.bpm) * beats;
     }
 
-    /* ---------- SoundFont ---------- */
-    async loadSoundfont(name: InstrumentId) {
-        this.resumeContext();
-
-        if (this.sfInstruments.has(name)) {
-            this.sfInstrument = this.sfInstruments.get(name)!;
-            this.currentInstrument = name;
-            this.useSoundfont = true;
-            this.soundfontReady = true;
-            return;
-        }
-
-        this.soundfontReady = false;
-
-        const instrument = await Soundfont.instrument(this.context, name, { gain: 0.9 });
-        this.sfInstruments.set(name, instrument);
-        this.sfInstrument = instrument;
-        this.currentInstrument = name;
-        this.useSoundfont = true;
-        this.soundfontReady = true;
-    }
-
-    getCurrentInstrument() {
-        return this.currentInstrument;
-    }
-
-    /* ---------- Notes ---------- */
-    playNote(note: string, durationSec?: number) {
-        this.resumeContext();
-
-        if (this.useSoundfont && !this.soundfontReady) return;
-
+    private playNoteWithSoundfont(note: string, durationSec: number) {
         if (this.useSoundfont && this.sfInstrument) {
             const stopFn = this.playSfNote(note, this.context.currentTime);
-
             if (durationSec) setTimeout(stopFn, durationSec * 1000);
-            return;
         }
+    }
 
-        // Oscillator fallback
+    private playNoteWithWebAudio(note: string, durationSec?: number) {
         const osc = this.context.createOscillator();
         const gain = this.context.createGain();
         const now = this.context.currentTime;
@@ -149,13 +117,7 @@ export class AudioEngine {
         }
     }
 
-    playChord(chord: { notes: string[]; durationBeats?: number }) {
-        this.resumeContext();
-        const now = this.context.currentTime;
-        const durationSec = chord.durationBeats ? this.beatsToSeconds(chord.durationBeats) : undefined;
-
-        if (this.useSoundfont && !this.soundfontReady) return;
-
+    private playChordWithSoundfont(chord: { notes: string[] }, now: number, durationSec?: number) {
         if (this.useSoundfont && this.sfInstrument) {
             chord.notes.forEach(note => {
                 const stopFn = this.playSfNote(note, now);
@@ -163,7 +125,9 @@ export class AudioEngine {
             });
             return;
         }
+    }
 
+    private playChordWithWebAudio(chord: { notes: string[]; durationBeats?: number }, now: number, durationSec?: number) {
         chord.notes.forEach(note => {
             // if (this.activeVoices.has(note)) return; // do not stop existing note
             const osc = this.context.createOscillator();
@@ -190,7 +154,6 @@ export class AudioEngine {
         });
     }
 
-
     private playSfNote(note: string, time: number, gain = 2.5) {
         if (!this.sfInstrument) return () => { };
 
@@ -209,6 +172,56 @@ export class AudioEngine {
         this.sfActiveNotes.get(note)!.add(stopFn);
 
         return stopFn;
+    }
+
+    /* ---------- SoundFont ---------- */
+    async loadSoundfont(name: InstrumentId) {
+        this.resumeContext();
+
+        if (this.sfInstruments.has(name)) {
+            this.sfInstrument = this.sfInstruments.get(name)!;
+            this.currentInstrument = name;
+            this.useSoundfont = true;
+            this.soundfontReady = true;
+            return;
+        }
+
+        this.soundfontReady = false;
+
+        const instrument = await Soundfont.instrument(this.context, name, { gain: 0.9 });
+        this.sfInstruments.set(name, instrument);
+        this.sfInstrument = instrument;
+        this.currentInstrument = name;
+        this.useSoundfont = true;
+        this.soundfontReady = true;
+    }
+
+    /* ---------- Play Single Note ---------- */
+    playNote(note: string, durationSec?: number) {
+        this.resumeContext();
+
+        // SoundFont playback
+        if (this.useSoundfont && this.soundfontReady) {
+            this.playNoteWithSoundfont(note, durationSec!);
+            return;
+        }
+
+        // Oscillator fallback
+        this.playNoteWithWebAudio(note, durationSec);
+    }
+
+    /* ---------- Play Chord ---------- */
+    playChord(chord: { notes: string[]; durationBeats?: number }) {
+        this.resumeContext();
+        const now = this.context.currentTime;
+        const durationSec = chord.durationBeats ? this.beatsToSeconds(chord.durationBeats) : undefined;
+
+        if (this.useSoundfont && this.soundfontReady) {
+            this.playChordWithSoundfont(chord, now, durationSec);
+            return;
+        }
+        
+        this.playChordWithWebAudio(chord, now, durationSec);
     }
 
     /* ---------- Sequence ---------- */

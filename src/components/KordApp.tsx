@@ -37,8 +37,8 @@ export default function KordApp() {
 	const audioEngine = useRef(new AudioEngine(120, "sine"));
 	// notes currently physically held down
 	const pressedNotes = useRef<Set<string>>(new Set());
-
-
+	
+	/* ---------- change instrument ---------- */
 	const changeInstrument = async (id: InstrumentId) => {
 		await audioEngine.current.loadSoundfont(id);
 
@@ -50,13 +50,13 @@ export default function KordApp() {
 		setInstrument(id);
 	};
 
+	/* ---------- sound ready ref ---------- */
 	const soundReadyRef = useRef(false);
 
 	/* ---------- sound ready ---------- */
 	useEffect(() => {
 		soundReadyRef.current = soundReady;
 	}, [soundReady]);
-
 
 	/* ---------- resume audio ---------- */
 	useEffect(() => {
@@ -78,7 +78,7 @@ export default function KordApp() {
 	}, []);
 
 
-	/* ---------- KEYBOARD / MOUSE ---------- */
+	/* ---------- Keyboard press ---------- */
 	const handleNoteOn = (note: string) => {
 		if (!soundReadyRef.current) return;
 
@@ -98,7 +98,7 @@ export default function KordApp() {
 		setChordName(matches.length ? matches[0] : "—");
 	};
 
-
+	/* ---------- Keyboard release ---------- */
 	const handleNoteOff = (note: string) => {
 		if (!soundReadyRef.current) return;
 
@@ -110,7 +110,7 @@ export default function KordApp() {
 		audioEngine.current.stopNote(note);
 	};
 
-	/* ---------- MOUSE CLICK NOTE ---------- */
+	/* ---------- Mouse click ---------- */
 	const handleNoteClick = (note: string) => {
 		if (!soundReadyRef.current) return;
 
@@ -131,7 +131,7 @@ export default function KordApp() {
 		setChordName(matches.length ? matches[0] : "—");
 	};
 
-	/* ---------- PLAY SEQUENCE ---------- */
+	/* ---------- Play sequence ---------- */
 	const handleSequencePlay = (startIndex = 0) => {
 		if (!savedChords.length) return;
 
@@ -156,7 +156,7 @@ export default function KordApp() {
 		);
 	};
 
-	/* ---------- CHORD PREVIEW ---------- */
+	/* ---------- Play chord preview ---------- */
 	const handlePreviewChord = (chord: { notes: string[]; duration?: number }) => {
 		const notes = sortNotesByPitch(chord.notes);
 

@@ -10,10 +10,10 @@ import {
 } from "@hello-pangea/dnd";
 
 import type { AudioEngine, InstrumentId, SoundType } from "../helpers/AudioEngine";
-import TimelineControls from "./TimelineControls";
-import TransportButtons from "./TransportButtons";
-import InstrumentSelector from "./InstrumentSelector";
-import { PlayIcon, StopIcon, TrashIcon } from "./icons/TransportIcons";
+import TimelineControls from "../atoms/TimelineControls";
+import TransportButtons from "../atoms/TransportButtons";
+import InstrumentSelector from "../atoms/InstrumentSelector";
+import { PlayIcon, StopIcon, TrashIcon } from "../icons/TransportIcons";
 
 /* ---------- types ---------- */
 export type SavedChord = {
@@ -187,8 +187,6 @@ export default function ChordTimeline({
 					audioEngine={audioEngine}
 					setPlayheadIndex={setPlayheadIndex}
 				/>
-
-				{/* <SoundSelector sound={sound} setSound={setSound} /> */}
 
 				<InstrumentSelector
 					current={instrument}

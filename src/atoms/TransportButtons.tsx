@@ -1,7 +1,7 @@
 // src/components/TransportButtons.tsx
 import type { AudioEngine } from "../helpers/AudioEngine";
-import RippleButton from "../atoms/RippleButton";
-import { PlayIcon, StopIcon, RewindIcon, ForwardIcon } from "./icons/TransportIcons";
+import RippleButton from "./RippleButton";
+import { PlayIcon, StopIcon, RewindIcon, ForwardIcon } from "../icons/TransportIcons";
 
 type Props = {
     playheadIndex: number | null;

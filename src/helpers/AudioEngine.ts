@@ -240,17 +240,28 @@ export class AudioEngine {
     }
 
     /* ---------- Play Chord ---------- */
-    playChord(chord: { notes: string[]; durationBeats?: number }) {
+    playChord(
+        chord: { notes: string[]; durationBeats?: number },
+        onEnd?: () => void
+    ) {
         this.resumeContext();
-        const now = this.getContext().currentTime;
-        const durationSec = chord.durationBeats ? this.beatsToSeconds(chord.durationBeats) : undefined;
+        const ctx = this.getContext();
+        const now = ctx.currentTime;
+
+        const durationSec = chord.durationBeats
+            ? this.beatsToSeconds(chord.durationBeats)
+            : undefined;
 
         if (this.useSoundfont && this.soundfontReady) {
             this.playChordWithSoundfont(chord, now, durationSec);
-            return;
+        } else {
+            this.playChordWithWebAudio(chord, now, durationSec);
         }
-        
-        this.playChordWithWebAudio(chord, now, durationSec);
+
+        // 🔔 Notify when the chord has fully finished
+        if (durationSec && onEnd) {
+            window.setTimeout(onEnd, durationSec * 1000);
+        }
     }
 
     /* ---------- Sequence ---------- */

@@ -306,6 +306,16 @@ export default function ChordTimeline({
 																	audioEngine.stopSequence();
 																	manualPlayIndexRef.current = index;
 																	setPlayheadIndex(index);
+																	audioEngine.playChord(
+																		{
+																			notes: chord.notes,
+																			durationBeats: chord.duration ?? 1,
+																		},
+																		() => {
+																			manualPlayIndexRef.current = null;
+																			setPlayheadIndex(null);
+																		}
+																	);
 																	onPreviewChord(chord);
 																}
 															}}

@@ -1,8 +1,7 @@
 // src/components/TransportButtons.tsx
 import type { AudioEngine } from "../helpers/AudioEngine";
 import RippleButton from "../atoms/RippleButton";
-import { SkipBack, Play, Square, SkipForward } from "lucide-react";
-import { PlayIcon, StopIcon } from "./icons/TransportIcons";
+import { PlayIcon, StopIcon, RewindIcon, ForwardIcon } from "./icons/TransportIcons";
 
 type Props = {
     playheadIndex: number | null;
@@ -20,7 +19,7 @@ export default function TransportButtons({
     setPlayheadIndex
 }: Props) {
     return (
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-nowrap">
             {/* rewind button */}
             <RippleButton
                 className="bg-gray-700 hover:bg-gray-600 rounded-xl"
@@ -33,7 +32,7 @@ export default function TransportButtons({
                     );
                 }}
             >
-                <SkipBack size={20} />
+                <RewindIcon className="w-5 h-5" />
             </RippleButton>
 
             {/* play button */}
@@ -51,10 +50,9 @@ export default function TransportButtons({
             <RippleButton
                 className="bg-red-600 hover:bg-red-500 rounded-xl"
                 onClick={() => {
-                        audioEngine.stopSequence()
-                        setPlayheadIndex(null);
-                    }
-                }
+                    audioEngine.stopSequence();
+                    setPlayheadIndex(null);
+                }}
             >
                 <StopIcon className="w-5 h-5" />
             </RippleButton>
@@ -71,19 +69,25 @@ export default function TransportButtons({
                     );
                 }}
             >
-                <SkipForward size={20} />
+                <ForwardIcon className="w-5 h-5" />
             </RippleButton>
 
-            {/* panic button */}
-            <RippleButton
-                onClick={() => {
-                    audioEngine.panic();
-                    setPlayheadIndex(null);
-                }}
-                className="px-3 py-1 bg-red-700 hover:bg-red-600 rounded text-white font-bold"
-            >
-                PANIC
-            </RippleButton>
+            {/* panic button + label */}
+            <div className="flex items-center gap-2 shrink-0">
+                <RippleButton
+                    onClick={() => {
+                        audioEngine.panic();
+                        setPlayheadIndex(null);
+                    }}
+                    className="px-4 py-1 bg-red-900 hover:bg-red-700 rounded text-white font-bold"
+                >
+                    PANIC
+                </RippleButton>
+
+                <span className="text-sm text-gray-400 whitespace-nowrap">
+                    (Stops all sound)
+                </span>
+            </div>
         </div>
     );
 }

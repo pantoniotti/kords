@@ -27,7 +27,7 @@ export default function KordApp() {
 	const [currentChordNotes, setCurrentChordNotes] = useState<string[]>([]);
 	const [chordName, setChordName] = useState("—");
 
-	const [baseOctave, setBaseOctave] = useState(4);
+	const [baseOctave, setBaseOctave] = useState(3);
 	const [savedChords, setSavedChords] = useState<any[]>([]);
 	const [loop, setLoop] = useState(false);
 	const [playheadIndex, setPlayheadIndex] = useState<number | null>(null);

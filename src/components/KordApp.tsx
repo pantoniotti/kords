@@ -1,15 +1,17 @@
 // src/KordApp.tsx
 import { useEffect, useRef, useState } from "react";
 import { detect as detectChord } from "@tonaljs/chord-detect";
-import { Note, Midi } from "@tonaljs/tonal";
+import { Chord, Note, Midi } from "@tonaljs/tonal";
 
 import { AudioEngine, type InstrumentId } from "../helpers/AudioEngine";
 import Keyboard from "./Keyboard";
 import ChordTimeline from "./ChordsTimeline";
 import ChordImportExport from "./ChordImportExport";
 import ChordDisplay from "./ChordDisplay";
+import { AudioHelper } from "../helpers/AudioHelper";
 
 const BEATS_PER_BAR = 4;
+const BASE_OCTAVE_DEFAULT = 3;
 
 /* ---------- helpers ---------- */
 function sortNotesByPitch(notes: string[]) {
@@ -27,7 +29,7 @@ export default function KordApp() {
 	const [currentChordNotes, setCurrentChordNotes] = useState<string[]>([]);
 	const [chordName, setChordName] = useState("—");
 
-	const [baseOctave, setBaseOctave] = useState(3);
+	const [baseOctave, setBaseOctave] = useState(BASE_OCTAVE_DEFAULT);
 	const [savedChords, setSavedChords] = useState<any[]>([]);
 	const [loop, setLoop] = useState(false);
 	const [playheadIndex, setPlayheadIndex] = useState<number | null>(null);
@@ -35,14 +37,18 @@ export default function KordApp() {
 	const [soundReady, setSoundReady] = useState(false);
 	const [instrument, setInstrument] = useState<InstrumentId>("acoustic_grand_piano");
 	const [isPlaying, setIsPlaying] = useState(false);
+	const [uiLocked, setUiLocked] = useState(false);
+
 
 	/* ---------- refs ---------- */
 	const audioEngine = useRef(new AudioEngine(120, "sine"));
-
+	
 	// notes currently physically held down (keyboard + MIDI)
 	const pressedNotes = useRef<Set<string>>(new Set());
-
+	
 	const soundReadyRef = useRef(false);
+	
+	const uiLockedRef = useRef(false);
 
 	/* ---------- change instrument ---------- */
 	const changeInstrument = async (id: InstrumentId) => {
@@ -58,6 +64,7 @@ export default function KordApp() {
 	/* ---------- spacebar transport ---------- */
 	useEffect(() => {
 		const onKeyDown = (e: KeyboardEvent) => {
+			if (uiLockedRef.current) return;          // 🔒 block transport
 			if (e.repeat) return;
 
 			if (e.code === "Space") {
@@ -69,13 +76,14 @@ export default function KordApp() {
 
 		window.addEventListener("keydown", onKeyDown);
 		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [isPlaying, savedChords, loop]);
+	}, [isPlaying, savedChords, loop, uiLocked]);
 
 
 	/* ---------- sound ready ref ---------- */
 	useEffect(() => {
 		soundReadyRef.current = soundReady;
 	}, [soundReady]);
+
 
 	/* ---------- resume audio ---------- */
 	useEffect(() => {
@@ -96,26 +104,11 @@ export default function KordApp() {
 		};
 	}, []);
 
-	/* ---------- spacebar transport ---------- */
+
+	/* ---------- uiLocked ref sync ---------- */
 	useEffect(() => {
-		const onKeyDown = (e: KeyboardEvent) => {
-			// prevent auto-repeat
-			if (e.repeat) return;
-
-			if (e.code === "Space") {
-				e.preventDefault();
-
-				if (isPlaying) {
-					stopSequence();
-				} else {
-					handlePlaySequence(0);
-				}
-			}
-		};
-
-		window.addEventListener("keydown", onKeyDown);
-		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [isPlaying, savedChords, loop]);
+		uiLockedRef.current = uiLocked;
+	}, [uiLocked]);
 
 
 	/* ---------- MIDI support ---------- */
@@ -129,6 +122,8 @@ export default function KordApp() {
 
 		const onMidiMessage = (e: MIDIMessageEvent) => {
 			if (!soundReadyRef.current) return;
+			if (uiLockedRef.current) return;
+
 			if (!e.data) return;
 
 			const [status, noteNumber, velocity = 0] = e.data;
@@ -171,9 +166,32 @@ export default function KordApp() {
 		};
 	}, []);
 
+	/* ---------- 	Chord edit ---------- */
+	const handleChordTextCommit = (text: string) => {
+		const parsed = Chord.get(text);
+
+		// invalid chord
+		if (!parsed || !parsed.notes.length) {
+			console.log("invalid chord:", text);
+			return false;
+		}
+
+		// normalize notes to current octave
+		const notes = AudioHelper.voiceChord(parsed.notes, baseOctave);
+
+		setCurrentChordNotes(notes);
+		setChordName(parsed.symbol || text);
+
+		audioEngine.current.stopSequence();
+		audioEngine.current.playChord({ notes, durationBeats: 1 });
+
+		return true;
+	};
+
 	/* ---------- Keyboard press ---------- */
 	const handleNoteOn = (note: string) => {
 		if (!soundReadyRef.current) return;
+		if (uiLockedRef.current) return;
 
 		// already held → ignore (important for polyphony)
 		if (pressedNotes.current.has(note)) return;
@@ -194,6 +212,7 @@ export default function KordApp() {
 	/* ---------- Keyboard release ---------- */
 	const handleNoteOff = (note: string) => {
 		if (!soundReadyRef.current) return;
+		if (uiLockedRef.current) return;
 
 		if (!pressedNotes.current.has(note)) return;
 
@@ -206,6 +225,7 @@ export default function KordApp() {
 	/* ---------- Mouse click ---------- */
 	const handleNoteClick = (note: string) => {
 		if (!soundReadyRef.current) return;
+		if (uiLockedRef.current) return;
 
 		let next: string[];
 
@@ -227,6 +247,7 @@ export default function KordApp() {
 	/* ---------- Play sequence ---------- */
 	const handlePlaySequence = (startIndex = 0) => {
 		if (!savedChords.length) return;
+		if (uiLockedRef.current) return;
 
 		audioEngine.current.playSequence(
 			savedChords.map(c => ({
@@ -299,13 +320,14 @@ export default function KordApp() {
 				onNoteOff={handleNoteOff}
 				onNoteClick={handleNoteClick}
 				onWidthChange={setKeyboardWidth}
-				disabled={!soundReady}
+				disabled={!soundReady || uiLocked}
 			/>
 
 			<ChordDisplay
 				chord={currentChord}
 				chordName={chordName}
 				audioEngine={audioEngine.current}
+				onCommitChord={handleChordTextCommit}
 			/>
 
 			<ChordTimeline
@@ -327,6 +349,7 @@ export default function KordApp() {
 				<ChordImportExport
 					savedChords={savedChords}
 					setSavedChords={setSavedChords}
+					setUiLocked={setUiLocked}
 				/>
 			</div>
 		</div>

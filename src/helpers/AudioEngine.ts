@@ -85,7 +85,6 @@ export class AudioEngine {
         return this.context!;
     }
 
-
     /* ---------- Utils ---------- */
     private noteToFreq(note: string) {
         const NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -143,8 +142,8 @@ export class AudioEngine {
                 if (durationSec) setTimeout(stopFn, durationSec * 1000);
             });
             return;
-        }
-    }
+        }   
+    }   
 
     private playChordWithWebAudio(chord: { notes: string[]; durationBeats?: number }, now: number, durationSec?: number) {
         chord.notes.forEach(note => {
@@ -332,5 +331,11 @@ export class AudioEngine {
     panic() {
         this.stopSequence();
         this.stopAllNotes();
+    }
+
+    suspendContext() {
+        if (this.getContext().state === "running") {
+            this.getContext().suspend();
+        }
     }
 }

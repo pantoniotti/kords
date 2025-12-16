@@ -51,9 +51,9 @@ export default function Keyboard({
 	onNoteOff,
 	onNoteClick,
 	onWidthChange,
-	disabled,
+	disabled
 }: Props) {
-	
+
 	/* ---------- visible keys ---------- */
 	const startIndex = Math.min(
 		Math.max(0, KEYS.findIndex(k => parseInt(k.slice(-1)) === baseOctave)),
@@ -112,13 +112,12 @@ export default function Keyboard({
 
 		return () => ro.disconnect();
 	}, [onWidthChange]);
-	
-	
+
 	/* ---------- render ---------- */
 	return (
-		<div 
-			ref={rootRef} 
-			id="keyboard-wrapper" 
+		<div
+			ref={rootRef}
+			id="keyboard-wrapper"
 			className="p-4 bg-gray-800 rounded-xl shadow-lg"
 			style={{ pointerEvents: disabled ? "none" : "auto", opacity: disabled ? 0.5 : 1 }}
 		>
@@ -126,37 +125,49 @@ export default function Keyboard({
 				className="relative mx-auto"
 				style={{ width: visibleWhiteKeys.length * whiteKeyWidth, height: 200 }}
 			>
+				{/* White keys */}
 				<div className="flex">
-					{visibleWhiteKeys.map(note => (
+					{visibleWhiteKeys.map(note => {
+						const isActive = activeNotes.includes(note);
+						return (
+							<div
+								key={note}
+								onMouseDown={() => onNoteClick(note)}
+								className={`
+									h-[192px] border border-gray-300 rounded-b-lg
+									relative z-0 cursor-pointer transition shadow-md box-border
+									${isActive ? "bg-blue-400" : "bg-white"}
+								`}
+								style={{ width: `${whiteKeyWidth}px` }}
+							>
+							{/* Note label at the bottom */}
+							<span className="absolute bottom-1 w-full text-center text-gray-400 text-xs select-none pointer-events-none">
+								{note}
+							</span>
+						</div>
+					);
+				})}
+				</div>
+
+			{/* Black keys */}
+			{blackKeys.map(({ note, left }) => {
+				const isActive = activeNotes.includes(note);
+					return (
 						<div
 							key={note}
 							onMouseDown={() => onNoteClick(note)}
 							className={`
-								h-[192px] border border-gray-300 rounded-b-lg
-								relative z-0 cursor-pointer transition shadow-md
-								box-border
-								${activeNotes.includes(note) ? "bg-blue-400" : "bg-white"}
+								absolute top-0 z-10 h-[128px]
+								rounded-b-md cursor-pointer transition shadow-2xl box-border
+								${isActive ? "bg-blue-800" : "bg-black"}
 							`}
-							style={{ width: `${whiteKeyWidth}px` }}
+							style={{ width: "32px", left }}
 						/>
-					))}
-				</div>
-
-				{blackKeys.map(({ note, left }) => (
-					<div
-						key={note}
-						onMouseDown={() => onNoteClick(note)}
-						className={`
-							absolute top-0 z-10 h-[128px]
-							rounded-b-md cursor-pointer transition shadow-2xl
-							box-border
-							${activeNotes.includes(note) ? "bg-blue-800" : "bg-black"}
-							`}
-						style={{ width: "32px", left }}
-
-					/>
-				))}
+					);
+				})}
 			</div>
+
+			{/* Footer info */}
 			<div className="mt-4 w-full flex items-center justify-between">
 				<div className="p-2 bg-gray-700 text-white rounded text-center w-full sm:w-[48%]">
 					Octaves: {visibleKeys[0]?.slice(-1)} – {visibleKeys[visibleKeys.length - 1]?.slice(-1)}

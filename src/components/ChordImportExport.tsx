@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import type { AudioEngine } from "../helpers/AudioEngine";
 
 type ChordImportExportProps = {
     savedChords: any[];

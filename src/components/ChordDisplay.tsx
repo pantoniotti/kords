@@ -35,11 +35,6 @@ export default function ChordDisplay({ chord, chordName, audioEngine, onCommitCh
             setIsEditing(false);
         }
     };
-
-    const exitEdit = () => {
-        setIsEditing(false);
-        setInputValue(chordName);
-    };
     
     return (
         <div

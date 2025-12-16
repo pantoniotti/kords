@@ -1,0 +1,103 @@
+[
+  {
+    "label": "Bm7",
+    "notes": [
+      "B2",
+      "A3",
+      "D4",
+      "F#4"
+    ],
+    "id": "d954301d-2b00-44fe-aa69-40d2e17f4f08",
+    "duration": 1,
+    "color": "#4b5563"
+  },
+  {
+    "label": "Em7",
+    "notes": [
+      "E2",
+      "B3",
+      "D4",
+      "G4"
+    ],
+    "id": "37f50996-1864-43f4-9cc8-1982de918524",
+    "duration": 1,
+    "color": "#4b5563"
+  },
+  {
+    "label": "Bmb6b9/C",
+    "notes": [
+      "C3",
+      "B3",
+      "D4",
+      "G4"
+    ],
+    "id": "78e6f5e6-120d-40f4-b784-c65e947cbf74",
+    "duration": 1,
+    "color": "#4b5563"
+  },
+  {
+    "label": "Bm7",
+    "notes": [
+      "B2",
+      "A3",
+      "D4",
+      "F#4"
+    ],
+    "id": "54365567-ad64-4425-9b53-711a7bb9dc14",
+    "duration": 1,
+    "color": "#4b5563"
+  },
+  {
+    "label": "Bm7",
+    "notes": [
+      "B2",
+      "A3",
+      "D4",
+      "F#4"
+    ],
+    "id": "b58a8821-e1cd-4ef6-a663-94702f2f2d00",
+    "duration": 1,
+    "color": "#4b5563"
+  },
+  {
+    "label": "F#m7",
+    "notes": [
+      "F#2",
+      "F#3",
+      "A3",
+      "C#4",
+      "E4",
+      "C#5"
+    ],
+    "id": "47a20bb4-189c-4074-a82e-adc40b7ae79b",
+    "duration": 1,
+    "color": "#4b5563"
+  },
+  {
+    "label": "C#m7",
+    "notes": [
+      "C#3",
+      "B3",
+      "E4",
+      "G#4",
+      "B4"
+    ],
+    "id": "bd57e425-69a5-4b5d-8114-849063f10379",
+    "duration": 1,
+    "color": "#4b5563"
+  },
+  {
+    "label": "Em7",
+    "notes": [
+      "E2",
+      "E3",
+      "B3",
+      "D4",
+      "G4",
+      "B4"
+    ],
+    "id": "7c6acdf6-ff79-4bf7-a537-cbc0e45539f6",
+    "duration": 1,
+    "color": "#4b5563"
+  }
+]

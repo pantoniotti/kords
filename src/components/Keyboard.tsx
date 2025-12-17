@@ -1,5 +1,4 @@
-// src/components/Keyboard.tsx
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /* ---------- keyboard layout ---------- */
 const KEYS = [
@@ -20,8 +19,8 @@ const EXTRA_KEYBOARD: Record<string, string> = {
 	i: "C", k: "C#", o: "D", l: "D#", p: "E"
 };
 
-const whiteKeyWidth = 48;
-const blackKeyOffsetMap: Record<string, number> = { C: 32, D: 30, F: 30, G: 30, A: 30 };
+const DESKTOP_KEY_WIDTH = 48;
+const MOBILE_KEY_WIDTH = 32;
 const VISIBLE_KEYS_COUNT = 37;
 
 /* ---------- helpers ---------- */
@@ -41,6 +40,7 @@ type Props = {
 	onNoteClick: (note: string) => void;
 	onWidthChange?: (width: number) => void;
 	disabled?: boolean;
+	isMobile?: boolean;
 };
 
 export default function Keyboard({
@@ -51,15 +51,22 @@ export default function Keyboard({
 	onNoteOff,
 	onNoteClick,
 	onWidthChange,
-	disabled
+	disabled,
+	isMobile
 }: Props) {
+
+	const whiteKeyWidth = isMobile ? MOBILE_KEY_WIDTH : DESKTOP_KEY_WIDTH;
+	const keyboardHeight = isMobile ? 140 : 200;
+	const blackKeyHeight = isMobile ? 90 : 128;
+	const blackKeyOffsetMap: Record<string, number> = { C: 32, D: 30, F: 30, G: 30, A: 30 };
+
+	const scrollRef = useRef<HTMLDivElement | null>(null);
 
 	/* ---------- visible keys ---------- */
 	const startIndex = Math.min(
 		Math.max(0, KEYS.findIndex(k => parseInt(k.slice(-1)) === baseOctave)),
 		KEYS.length - VISIBLE_KEYS_COUNT
 	);
-
 	const visibleKeys = KEYS.slice(startIndex, startIndex + VISIBLE_KEYS_COUNT);
 	const visibleWhiteKeys = visibleKeys.filter(k => !k.includes("#"));
 
@@ -69,14 +76,14 @@ export default function Keyboard({
 			const pred = KEYS[KEYS.indexOf(key) - 1];
 			const idx = visibleWhiteKeys.indexOf(pred);
 			const offset = blackKeyOffsetMap[pred?.[0]];
-			return idx >= 0 && offset !== undefined
-				? { note: key, left: idx * whiteKeyWidth + offset }
-				: null;
+			return idx >= 0 && offset !== undefined ? { note: key, left: idx * whiteKeyWidth + offset } : null;
 		})
-		.filter(Boolean) as { note: string; left: number }[];
+		.filter(Boolean) as { note: string, left: number }[];
 
 	/* ---------- computer keyboard ---------- */
 	useEffect(() => {
+		if (isMobile) return;
+
 		const down = (e: KeyboardEvent) => {
 			if (e.key === "z") return setBaseOctave(Math.max(1, baseOctave - 1));
 			if (e.key === "x") return setBaseOctave(Math.min(4, baseOctave + 1));
@@ -89,27 +96,32 @@ export default function Keyboard({
 		};
 		window.addEventListener("keydown", down);
 		window.addEventListener("keyup", up);
-		return () => {
-			window.removeEventListener("keydown", down);
-			window.removeEventListener("keyup", up);
-		};
-	}, [baseOctave]);
+		return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
+	}, [baseOctave, isMobile]);
+
+	/* ---------- scroll buttons (desktop) ---------- */
+	// const scrollAmount = whiteKeyWidth * 5; // 5 keys at a time
+	// const scrollLeft = () => { scrollRef.current?.scrollBy({ left: -scrollAmount, behavior: "smooth" }); };
+	// const scrollRight = () => { scrollRef.current?.scrollBy({ left: scrollAmount, behavior: "smooth" }); };
+
+	// Replace the scroll buttons handlers with:
+	const scrollLeft = () => {
+		setBaseOctave(Math.max(1, baseOctave - 1));
+	};
+
+	const scrollRight = () => {
+		setBaseOctave(Math.min(6, baseOctave + 1));
+	};
+
 
 	/* ---------- width observer ---------- */
 	const rootRef = useRef<HTMLDivElement | null>(null);
-
 	useEffect(() => {
 		if (!rootRef.current || !onWidthChange) return;
-
-		const update = () => {
-			onWidthChange(rootRef.current!.offsetWidth);
-		};
-
+		const update = () => onWidthChange(rootRef.current!.offsetWidth);
 		update();
-
 		const ro = new ResizeObserver(update);
 		ro.observe(rootRef.current);
-
 		return () => ro.disconnect();
 	}, [onWidthChange]);
 
@@ -117,63 +129,57 @@ export default function Keyboard({
 	return (
 		<div
 			ref={rootRef}
-			id="keyboard-wrapper"
-			className="p-4 bg-gray-800 rounded-xl shadow-lg"
+			className="p-4 bg-gray-800 rounded-xl shadow-lg flex flex-col gap-2"
 			style={{ pointerEvents: disabled ? "none" : "auto", opacity: disabled ? 0.5 : 1 }}
 		>
-			<div
-				className="relative mx-auto"
-				style={{ width: visibleWhiteKeys.length * whiteKeyWidth, height: 200 }}
-			>
-				{/* White keys */}
-				<div className="flex">
-					{visibleWhiteKeys.map(note => {
+			{/* Scrollable keyboard */}
+			<div ref={scrollRef} className="overflow-x-auto touch-pan-x scrollbar-hide mx-auto">
+				<div className="relative" style={{ width: visibleWhiteKeys.length * whiteKeyWidth, height: keyboardHeight }}>
+					{/* White keys */}
+					<div className="flex">
+						{visibleWhiteKeys.map(note => {
+							const isActive = activeNotes.includes(note);
+							return (
+								<div
+									key={note}
+									onPointerDown={() => onNoteClick(note)}
+									className={`relative border border-gray-300 rounded-b-lg cursor-pointer ${isActive ? "bg-blue-400" : "bg-white"}`}
+									style={{ width: whiteKeyWidth, height: keyboardHeight - 8 }}
+								>
+									<span className="absolute bottom-1 w-full text-center text-gray-400 text-xs select-none">{note}</span>
+								</div>
+							);
+						})}
+					</div>
+
+					{/* Black keys */}
+					{blackKeys.map(({ note, left }) => {
 						const isActive = activeNotes.includes(note);
 						return (
 							<div
 								key={note}
-								onMouseDown={() => onNoteClick(note)}
-								className={`
-									h-[192px] border border-gray-300 rounded-b-lg
-									relative z-0 cursor-pointer transition shadow-md box-border
-									${isActive ? "bg-blue-400" : "bg-white"}
-								`}
-								style={{ width: `${whiteKeyWidth}px` }}
-							>
-							{/* Note label at the bottom */}
-							<span className="absolute bottom-1 w-full text-center text-gray-400 text-xs select-none pointer-events-none">
-								{note}
-							</span>
-						</div>
-					);
-				})}
+								onPointerDown={() => onNoteClick(note)}
+								className={`absolute top-0 z-10 rounded-b-md cursor-pointer shadow-2xl ${isActive ? "bg-blue-800" : "bg-black"}`}
+								style={{ width: 32, left, height: blackKeyHeight }}
+							/>
+						);
+					})}
 				</div>
-
-			{/* Black keys */}
-			{blackKeys.map(({ note, left }) => {
-				const isActive = activeNotes.includes(note);
-					return (
-						<div
-							key={note}
-							onMouseDown={() => onNoteClick(note)}
-							className={`
-								absolute top-0 z-10 h-[128px]
-								rounded-b-md cursor-pointer transition shadow-2xl box-border
-								${isActive ? "bg-blue-800" : "bg-black"}
-							`}
-							style={{ width: "32px", left }}
-						/>
-					);
-				})}
 			</div>
 
 			{/* Footer info */}
-			<div className="mt-4 w-full flex items-center justify-between">
-				<div className="p-2 bg-gray-700 text-white rounded text-center w-full sm:w-[48%]">
-					Octaves: {visibleKeys[0]?.slice(-1)} – {visibleKeys[visibleKeys.length - 1]?.slice(-1)}
+			<div className="flex flex-col sm:flex-row gap-2 mt-2">
+				<div className="p-2 bg-gray-700 text-white rounded text-center w-full sm:w-1/2">
+					{/* Desktop scroll buttons */}
+					{!isMobile && (
+						<div className="flex justify-between mb-1">
+							<button onClick={scrollLeft} className="px-3 py-0 bg-gray-700 rounded text-white">◀</button>
+							Octave: {baseOctave}
+							<button onClick={scrollRight} className="px-3 py-0 bg-gray-700 rounded text-white">▶</button>
+						</div>
+					)}
 				</div>
-
-				<div className="p-2 bg-gray-700 text-white rounded text-center w-full sm:w-[48%]">
+				<div className="p-2 bg-gray-700 text-white rounded text-center w-full sm:w-1/2">
 					Notes: {activeNotes.join(" • ") || ""}
 				</div>
 			</div>

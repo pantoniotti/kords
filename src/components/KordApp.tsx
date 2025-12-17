@@ -9,6 +9,7 @@ import ChordTimeline from "./ChordsTimeline";
 import ChordImportExport from "./ChordImportExport";
 import ChordDisplay from "./ChordDisplay";
 import { AudioHelper } from "../helpers/AudioHelper";
+import { AudioUiContext } from "../context/AudioUiContext";
 
 const BEATS_PER_BAR = 4;
 const BASE_OCTAVE_DEFAULT = 3;
@@ -47,7 +48,7 @@ export default function KordApp() {
 	const [instrument, setInstrument] = useState<InstrumentId>("acoustic_grand_piano");
 	const [isPlaying, setIsPlaying] = useState(false);
 	const [uiLocked, setUiLocked] = useState(false);
-
+	const [muted, setMuted] = useState(false);
 
 	/* ---------- refs ---------- */
 	// audio engine
@@ -72,6 +73,10 @@ export default function KordApp() {
 		setInstrument(id);
 	};
 
+	useEffect(() => {
+		audioEngine.current.setMuted(muted);
+	}, [muted]);
+	
 	/* ---------- spacebar transport ---------- */
 	useEffect(() => {
 		const onKeyDown = (e: KeyboardEvent) => {
@@ -210,15 +215,15 @@ export default function KordApp() {
 
 		pressedNotes.current.add(note);
 
-		// 🔊 audio: play ONLY this note
-		audioEngine.current.playNote(note);
-
 		// 🎼 commit chord visually
 		const chord = sortNotesByPitch(Array.from(pressedNotes.current));
 		setCurrentChordNotes(chord);
 
 		const matches = detectChord(chord);
 		setChordName(matches.length ? matches[0] : "—");
+
+		// 🔊 audio: play ONLY this note
+		audioEngine.current.playNote(note);
 	};
 
 	/* ---------- Keyboard release ---------- */
@@ -328,47 +333,49 @@ export default function KordApp() {
 					</div>
 				)}
 
-				<Keyboard
-					baseOctave={baseOctave}
-					setBaseOctave={setBaseOctave}
-					activeNotes={currentChordNotes}
-					onNoteOn={handleNoteOn}
-					onNoteOff={handleNoteOff}
-					onNoteClick={handleNoteClick}
-					onWidthChange={setKeyboardWidth}
-					disabled={!soundReady || uiLocked}
-					isMobile={isMobile}
-				/>
-
-				<ChordDisplay
-					chord={currentChord}
-					chordName={chordName}
-					audioEngine={audioEngine.current}
-					onCommitChord={handleChordTextCommit}
-				/>
-
-				<ChordTimeline
-					timeline={savedChords}
-					setTimeline={setSavedChords}
-					width={keyboardWidth}
-					audioEngine={audioEngine.current}
-					playSequence={handlePlaySequence}
-					onPreviewChord={handlePreviewChord}
-					loop={loop}
-					setLoop={setLoop}
-					playheadIndex={playheadIndex}
-					setPlayheadIndex={setPlayheadIndex}
-					instrument={instrument}
-					changeInstrument={changeInstrument}
-				/>
-
-				<div className="mt-4">
-					<ChordImportExport
-						savedChords={savedChords}
-						setSavedChords={setSavedChords}
-						setUiLocked={setUiLocked}
+				<AudioUiContext.Provider value={{ muted, setMuted }}>
+					<Keyboard
+						baseOctave={baseOctave}
+						setBaseOctave={setBaseOctave}
+						activeNotes={currentChordNotes}
+						onNoteOn={handleNoteOn}
+						onNoteOff={handleNoteOff}
+						onNoteClick={handleNoteClick}
+						onWidthChange={setKeyboardWidth}
+						disabled={!soundReady || uiLocked}
+						isMobile={isMobile}
 					/>
-				</div>
+
+					<ChordDisplay
+						chord={currentChord}
+						chordName={chordName}
+						audioEngine={audioEngine.current}
+						onCommitChord={handleChordTextCommit}
+					/>
+
+					<ChordTimeline
+						timeline={savedChords}
+						setTimeline={setSavedChords}
+						width={keyboardWidth}
+						audioEngine={audioEngine.current}
+						playSequence={handlePlaySequence}
+						onPreviewChord={handlePreviewChord}
+						loop={loop}
+						setLoop={setLoop}
+						playheadIndex={playheadIndex}
+						setPlayheadIndex={setPlayheadIndex}
+						instrument={instrument}
+						changeInstrument={changeInstrument}
+					/>
+
+					<div className="mt-4">
+						<ChordImportExport
+							savedChords={savedChords}
+							setSavedChords={setSavedChords}
+							setUiLocked={setUiLocked}
+							/>
+					</div>
+				</AudioUiContext.Provider>
 			</div>
 		</div>
 	);

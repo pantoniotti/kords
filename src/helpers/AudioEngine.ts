@@ -26,15 +26,16 @@ export class AudioEngine {
     private sfActiveNotes: Map<string, Set<() => void>> = new Map();
     private sequenceTimeouts: number[] = [];
 
-    private masterGain: GainNode;
-
     private sfInstruments: Map<InstrumentId, Soundfont.Player> = new Map();
     private sfInstrument: Soundfont.Player | null = null;
     private useSoundfont = false;
     private soundfontReady = false;
     private noteReleaseSec = 0.25;
 
-    constructor(bpm = 120, sound: SoundType = "sawtooth") {
+    private masterGain: GainNode;
+    private muted = false;
+
+    constructor(bpm = 120, sound: SoundType = "sine") {
         this.context = new AudioContext({ latencyHint: "interactive" });
         this.bpm = bpm;
         this.sound = sound;
@@ -59,6 +60,11 @@ export class AudioEngine {
 
     setReleaseTime(sec: number) {
         this.noteReleaseSec = sec;
+    }
+
+    setMuted(muted: boolean) {
+        this.muted = muted
+        this.masterGain.gain.value = muted ? 0 : 1.0;
     }
 
     /* ---------- Context ---------- */
@@ -226,6 +232,8 @@ export class AudioEngine {
 
     /* ---------- Play Single Note ---------- */
     playNote(note: string, durationSec?: number) {
+        if (this.muted) return
+
         this.resumeContext();
 
         // SoundFont playback
@@ -243,6 +251,8 @@ export class AudioEngine {
         chord: { notes: string[]; durationBeats?: number },
         onEnd?: () => void
     ) {
+        if (this.muted) return
+
         this.resumeContext();
         const ctx = this.getContext();
         const now = ctx.currentTime;
@@ -270,6 +280,8 @@ export class AudioEngine {
         loop = false,
         onStep?: (chord: { notes: string[] }, index: number) => void
     ) {
+        if (this.muted) return
+
         this.stopSequence();
 
         const schedule = (index: number) => {
@@ -329,6 +341,7 @@ export class AudioEngine {
     }
 
     panic() {
+        this.setMuted(true)
         this.stopSequence();
         this.stopAllNotes();
     }

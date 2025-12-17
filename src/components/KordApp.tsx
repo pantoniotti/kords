@@ -23,6 +23,15 @@ function sortNotesByPitch(notes: string[]) {
 	});
 }
 
+function useIsMobile() {
+	const [isMobile, setIsMobile] = useState(false);
+	useEffect(() => {
+		const mq = window.matchMedia("(pointer: coarse)");
+		setIsMobile(mq.matches);
+	}, []);
+	return isMobile;
+}
+
 /* ---------- component ---------- */
 export default function KordApp() {
 	/* ---------- state ---------- */
@@ -41,14 +50,16 @@ export default function KordApp() {
 
 
 	/* ---------- refs ---------- */
+	// audio engine
 	const audioEngine = useRef(new AudioEngine(120, "sine"));
-	
 	// notes currently physically held down (keyboard + MIDI)
 	const pressedNotes = useRef<Set<string>>(new Set());
-	
+	// sound ready flag
 	const soundReadyRef = useRef(false);
-	
+	// lock to prevent UI interactions (e.g., during import/export)
 	const uiLockedRef = useRef(false);
+	/* ---------- mobile detection ---------- */
+	const isMobile = useIsMobile();
 
 	/* ---------- change instrument ---------- */
 	const changeInstrument = async (id: InstrumentId) => {
@@ -69,6 +80,7 @@ export default function KordApp() {
 
 			if (e.code === "Space") {
 				e.preventDefault();
+				if (isMobile) return;
 				if (isPlaying) stopSequence();
 				else handlePlaySequence(0);
 			}
@@ -301,56 +313,62 @@ export default function KordApp() {
 
 	/* ---------- render ---------- */
 	return (
-		<div className="bg-gray-900 min-h-screen p-8 text-white flex flex-col items-center">
-			<h1 className="text-3xl font-bold mb-6">🎹 Chord Tool</h1>
+		<div className="min-h-screen bg-gray-900 text-white">
+			<div className="max-w-7xl mx-auto p-3 sm:p-6 lg:p-8 flex flex-col gap-4 overflow-x-hidden items-center">
+				{/* <h1 className="text-3xl font-bold mb-6">🎹 Chord Tool</h1> */}
+				<h1 className="text-2xl sm:text-3xl font-bold mb-3 sm:mb-6">
+					🎹 Chord Tool
+				</h1>
 
-			{!soundReady && (
-				<div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-					<button className="px-6 py-3 text-xl bg-green-500 rounded">
-						Click to enable audio
-					</button>
-				</div>
-			)}
+				{!soundReady && (
+					<div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 px-4">
+						<button className="px-6 py-4 text-lg sm:text-xl bg-green-500 rounded-xl w-full max-w-xs">
+							Tap to enable audio
+						</button>
+					</div>
+				)}
 
-			<Keyboard
-				baseOctave={baseOctave}
-				setBaseOctave={setBaseOctave}
-				activeNotes={currentChordNotes}
-				onNoteOn={handleNoteOn}
-				onNoteOff={handleNoteOff}
-				onNoteClick={handleNoteClick}
-				onWidthChange={setKeyboardWidth}
-				disabled={!soundReady || uiLocked}
-			/>
-
-			<ChordDisplay
-				chord={currentChord}
-				chordName={chordName}
-				audioEngine={audioEngine.current}
-				onCommitChord={handleChordTextCommit}
-			/>
-
-			<ChordTimeline
-				timeline={savedChords}
-				setTimeline={setSavedChords}
-				width={keyboardWidth}
-				audioEngine={audioEngine.current}
-				playSequence={handlePlaySequence}
-				onPreviewChord={handlePreviewChord}
-				loop={loop}
-				setLoop={setLoop}
-				playheadIndex={playheadIndex}
-				setPlayheadIndex={setPlayheadIndex}
-				instrument={instrument}
-				changeInstrument={changeInstrument}
-			/>
-
-			<div className="mt-4">
-				<ChordImportExport
-					savedChords={savedChords}
-					setSavedChords={setSavedChords}
-					setUiLocked={setUiLocked}
+				<Keyboard
+					baseOctave={baseOctave}
+					setBaseOctave={setBaseOctave}
+					activeNotes={currentChordNotes}
+					onNoteOn={handleNoteOn}
+					onNoteOff={handleNoteOff}
+					onNoteClick={handleNoteClick}
+					onWidthChange={setKeyboardWidth}
+					disabled={!soundReady || uiLocked}
+					isMobile={isMobile}
 				/>
+
+				<ChordDisplay
+					chord={currentChord}
+					chordName={chordName}
+					audioEngine={audioEngine.current}
+					onCommitChord={handleChordTextCommit}
+				/>
+
+				<ChordTimeline
+					timeline={savedChords}
+					setTimeline={setSavedChords}
+					width={keyboardWidth}
+					audioEngine={audioEngine.current}
+					playSequence={handlePlaySequence}
+					onPreviewChord={handlePreviewChord}
+					loop={loop}
+					setLoop={setLoop}
+					playheadIndex={playheadIndex}
+					setPlayheadIndex={setPlayheadIndex}
+					instrument={instrument}
+					changeInstrument={changeInstrument}
+				/>
+
+				<div className="mt-4">
+					<ChordImportExport
+						savedChords={savedChords}
+						setSavedChords={setSavedChords}
+						setUiLocked={setUiLocked}
+					/>
+				</div>
 			</div>
 		</div>
 	);

@@ -20,8 +20,8 @@ const EXTRA_KEYBOARD: Record<string, string> = {
 	i: "C", k: "C#", o: "D", l: "D#", p: "E"
 };
 
-const whiteKeyWidth = 48;
-const blackKeyOffsetMap: Record<string, number> = { C: 32, D: 30, F: 30, G: 30, A: 30 };
+const DESKTOP_KEY_WIDTH = 48;
+const MOBILE_KEY_WIDTH = 32;
 const VISIBLE_KEYS_COUNT = 37;
 
 /* ---------- helpers ---------- */
@@ -41,6 +41,7 @@ type Props = {
 	onNoteClick: (note: string) => void;
 	onWidthChange?: (width: number) => void;
 	disabled?: boolean;
+	isMobile?: boolean;
 };
 
 export default function Keyboard({
@@ -51,9 +52,15 @@ export default function Keyboard({
 	onNoteOff,
 	onNoteClick,
 	onWidthChange,
-	disabled
+	disabled,
+	isMobile
 }: Props) {
-
+	
+	const whiteKeyWidth = isMobile ? MOBILE_KEY_WIDTH : DESKTOP_KEY_WIDTH;
+	const keyboardHeight = isMobile ? 140 : 200;
+	const blackKeyHeight = isMobile ? 90 : 128;
+	const blackKeyOffsetMap: Record<string, number> = { C: 32, D: 30, F: 30, G: 30, A: 30 };
+	
 	/* ---------- visible keys ---------- */
 	const startIndex = Math.min(
 		Math.max(0, KEYS.findIndex(k => parseInt(k.slice(-1)) === baseOctave)),
@@ -77,6 +84,8 @@ export default function Keyboard({
 
 	/* ---------- computer keyboard ---------- */
 	useEffect(() => {
+		if (isMobile) return;
+
 		const down = (e: KeyboardEvent) => {
 			if (e.key === "z") return setBaseOctave(Math.max(1, baseOctave - 1));
 			if (e.key === "x") return setBaseOctave(Math.min(4, baseOctave + 1));
@@ -93,7 +102,7 @@ export default function Keyboard({
 			window.removeEventListener("keydown", down);
 			window.removeEventListener("keyup", up);
 		};
-	}, [baseOctave]);
+	}, [baseOctave, isMobile]);
 
 	/* ---------- width observer ---------- */
 	const rootRef = useRef<HTMLDivElement | null>(null);
@@ -122,9 +131,12 @@ export default function Keyboard({
 			style={{ pointerEvents: disabled ? "none" : "auto", opacity: disabled ? 0.5 : 1 }}
 		>
 			<div
-				className="relative mx-auto"
-				style={{ width: visibleWhiteKeys.length * whiteKeyWidth, height: 200 }}
-			>
+				className="relative mx-auto max-w-full overflow-hidden"
+				style={{
+					width: visibleWhiteKeys.length * whiteKeyWidth,
+					height: keyboardHeight
+				}}
+		>
 				{/* White keys */}
 				<div className="flex">
 					{visibleWhiteKeys.map(note => {
@@ -132,7 +144,7 @@ export default function Keyboard({
 						return (
 							<div
 								key={note}
-								onMouseDown={() => onNoteClick(note)}
+								onPointerDown={() => onNoteClick(note)}
 								className={`
 									h-[192px] border border-gray-300 rounded-b-lg
 									relative z-0 cursor-pointer transition shadow-md box-border
@@ -155,10 +167,11 @@ export default function Keyboard({
 					return (
 						<div
 							key={note}
-							onMouseDown={() => onNoteClick(note)}
+							onPointerDown={() => onNoteClick(note)}
 							className={`
 								absolute top-0 z-10 h-[128px]
 								rounded-b-md cursor-pointer transition shadow-2xl box-border
+								active:scale-95 touch-none
 								${isActive ? "bg-blue-800" : "bg-black"}
 							`}
 							style={{ width: "32px", left }}
@@ -168,7 +181,7 @@ export default function Keyboard({
 			</div>
 
 			{/* Footer info */}
-			<div className="mt-4 w-full flex items-center justify-between">
+			<div className="mt-4 w-full flex flex-col sm:flex-row gap-2">
 				<div className="p-2 bg-gray-700 text-white rounded text-center w-full sm:w-[48%]">
 					Octaves: {visibleKeys[0]?.slice(-1)} – {visibleKeys[visibleKeys.length - 1]?.slice(-1)}
 				</div>

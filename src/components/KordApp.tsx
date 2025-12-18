@@ -38,7 +38,6 @@ export default function KordApp() {
 	/* ---------- state ---------- */
 	const [currentChordNotes, setCurrentChordNotes] = useState<string[]>([]);
 	const [chordName, setChordName] = useState("—");
-
 	const [baseOctave, setBaseOctave] = useState(BASE_OCTAVE_DEFAULT);
 	const [savedChords, setSavedChords] = useState<any[]>([]);
 	const [loop, setLoop] = useState(false);
@@ -49,6 +48,8 @@ export default function KordApp() {
 	const [isPlaying, setIsPlaying] = useState(false);
 	const [uiLocked, setUiLocked] = useState(false);
 	const [muted, setMuted] = useState(false);
+	const [chordMidi, setChordMidi] = useState<number[]>([60, 64, 67]); // C major
+
 
 	/* ---------- refs ---------- */
 	// audio engine
@@ -61,6 +62,8 @@ export default function KordApp() {
 	const uiLockedRef = useRef(false);
 	/* ---------- mobile detection ---------- */
 	const isMobile = useIsMobile();
+	/* ---------- chord to midi ---------- */
+	const chordNotes = chordMidi.map(n => Note.fromMidi(n)!);
 
 	/* ---------- change instrument ---------- */
 	const changeInstrument = async (id: InstrumentId) => {
@@ -73,6 +76,18 @@ export default function KordApp() {
 		setInstrument(id);
 	};
 
+	/* ----------- transpose notes ------------*/
+	function transposeNotes(notes: string[], semitones: number): string[] {
+		return notes
+			.map(n => {
+				const midi = Note.midi(n);
+				if (midi == null) return null;
+				return Note.fromMidi(midi + semitones);
+			})
+			.filter(Boolean) as string[];
+	}
+
+	/* ----------- use effects ------------*/
 	useEffect(() => {
 		audioEngine.current.setMuted(muted);
 	}, [muted]);
@@ -121,12 +136,10 @@ export default function KordApp() {
 		};
 	}, []);
 
-
 	/* ---------- uiLocked ref sync ---------- */
 	useEffect(() => {
 		uiLockedRef.current = uiLocked;
 	}, [uiLocked]);
-
 
 	/* ---------- MIDI support ---------- */
 	useEffect(() => {
@@ -193,8 +206,11 @@ export default function KordApp() {
 			return false;
 		}
 
-		// normalize notes to current octave
-		const notes = AudioHelper.voiceChord(parsed.notes, baseOctave);
+		// 1️⃣ Voice chord (adds octaves)
+		const voiced = AudioHelper.voiceChord(parsed.notes, baseOctave);
+
+		// 2️⃣ Normalize enharmonics (Bb → A#)
+		const notes = AudioHelper.normalizeSharps(voiced);
 
 		setCurrentChordNotes(notes);
 		setChordName(parsed.symbol || text);
@@ -237,6 +253,27 @@ export default function KordApp() {
 
 		// 🔊 audio only
 		audioEngine.current.stopNote(note);
+	};
+
+	/* ---------- Transpose Chord ---------- */
+	const handleTransposeChord = (semitones: number) => {
+		if (!currentChordNotes.length) return;
+
+		const transposed = sortNotesByPitch(
+			transposeNotes(currentChordNotes, semitones)
+		);
+		const normalized = AudioHelper.normalizeSharps(transposed);
+
+		setCurrentChordNotes(normalized);
+
+		const matches = detectChord(normalized);
+		setChordName(matches.length ? matches[0] : "—");
+
+		// optional preview (short)
+		audioEngine.current.playChord({
+			notes: normalized,
+			durationBeats: 0.5,
+		});
 	};
 
 	/* ---------- Mouse click ---------- */
@@ -351,6 +388,7 @@ export default function KordApp() {
 						chordName={chordName}
 						audioEngine={audioEngine.current}
 						onCommitChord={handleChordTextCommit}
+						onTranspose={handleTransposeChord}
 					/>
 
 					<ChordTimeline

@@ -177,7 +177,7 @@ export default function ChordTimeline({
 
 	/* ---------- render ---------- */
 	return (
-		<div className="mt-8 mx-auto flex flex-col gap-3" style={{ width }}>
+		<div className="mt-2 mx-auto flex flex-col gap-3" style={{ width }}>
 			<div className="flex items-center gap-4">
 
 				<TransportButtons

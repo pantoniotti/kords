@@ -47,4 +47,26 @@ export class AudioHelper {
             .map(Note.midi)
             .filter((n): n is number => n != null);
     }
+
+    static normalizeSharps(notes: string[]) {
+        return notes.map(this.forceSharps);
+    }
+
+    static forceSharps(note: string) {
+        const n = Note.get(note);
+        if (!n.pc) return note;
+
+        // Convert flat pitch classes to enharmonic sharps
+        const ENHARMONIC_MAP: Record<string, string> = {
+            Db: "C#",
+            Eb: "D#",
+            Gb: "F#",
+            Ab: "G#",
+            Bb: "A#",
+        };
+
+        const pc = ENHARMONIC_MAP[n.pc] ?? n.pc;
+        return pc + n.oct!;
+    }
+
 }

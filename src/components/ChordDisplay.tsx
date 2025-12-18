@@ -39,7 +39,7 @@ export default function ChordDisplay({ chord, chordName, audioEngine, onCommitCh
     
     return (
         <div className="flex items-stretch gap-2">
-            {/* LEFT BUTTONS */}
+            {/* LEFT BUTTONS */}``
             <div className="flex flex-col">
                 <button
                     onClick={() => onTranspose(-1)}

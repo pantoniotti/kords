@@ -48,7 +48,6 @@ export default function KordApp() {
 	const [isPlaying, setIsPlaying] = useState(false);
 	const [uiLocked, setUiLocked] = useState(false);
 	const [muted, setMuted] = useState(false);
-	const [chordMidi, setChordMidi] = useState<number[]>([60, 64, 67]); // C major
 
 
 	/* ---------- refs ---------- */
@@ -62,8 +61,6 @@ export default function KordApp() {
 	const uiLockedRef = useRef(false);
 	/* ---------- mobile detection ---------- */
 	const isMobile = useIsMobile();
-	/* ---------- chord to midi ---------- */
-	const chordNotes = chordMidi.map(n => Note.fromMidi(n)!);
 
 	/* ---------- change instrument ---------- */
 	const changeInstrument = async (id: InstrumentId) => {
